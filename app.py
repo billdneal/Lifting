@@ -1,284 +1,230 @@
 import streamlit as st
 import pandas as pd
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CORE LOGIC (Your Classes)
+# 1. CORE LOGIC & CONFIG
 # ==========================================
+st.set_page_config(page_title="5/3/1 SmartLog", page_icon="💪", layout="wide")
 
-# --- Full RTS Table for RPE Calculations ---
-# Source: Reactive Training Systems (Approximate values)
+# RTS Table for Auto-Regulation
 RTS_TABLE = {
-    10: {1: 1.000, 2: 0.955, 3: 0.922, 4: 0.892, 5: 0.863, 6: 0.837, 7: 0.811, 8: 0.786, 9: 0.762, 10: 0.739},
-    9.5: {1: 0.978, 2: 0.939, 3: 0.907, 4: 0.878, 5: 0.850, 6: 0.824, 7: 0.799, 8: 0.774, 9: 0.751, 10: 0.728},
-    9:  {1: 0.955, 2: 0.922, 3: 0.892, 4: 0.863, 5: 0.837, 6: 0.811, 7: 0.786, 8: 0.762, 9: 0.739, 10: 0.717},
-    8.5: {1: 0.939, 2: 0.907, 3: 0.878, 4: 0.850, 5: 0.824, 6: 0.799, 7: 0.774, 8: 0.751, 9: 0.728, 10: 0.706},
-    8:  {1: 0.922, 2: 0.892, 3: 0.863, 4: 0.837, 5: 0.811, 6: 0.786, 7: 0.762, 8: 0.739, 9: 0.717, 10: 0.696},
-    7.5: {1: 0.907, 2: 0.878, 3: 0.850, 4: 0.824, 5: 0.799, 6: 0.774, 7: 0.751, 8: 0.728, 9: 0.706, 10: 0.685},
-    7:  {1: 0.892, 2: 0.863, 3: 0.837, 4: 0.811, 5: 0.786, 6: 0.762, 7: 0.739, 8: 0.717, 9: 0.696, 10: 0.675},
-    6.5: {1: 0.878, 2: 0.850, 3: 0.824, 4: 0.799, 5: 0.774, 6: 0.751, 7: 0.728, 8: 0.706, 9: 0.685, 10: 0.665},
-    6:  {1: 0.863, 2: 0.837, 3: 0.811, 4: 0.786, 5: 0.762, 6: 0.739, 7: 0.717, 8: 0.696, 9: 0.675, 10: 0.655}
+    10: {1: 1.000, 2: 0.955, 3: 0.922, 4: 0.892, 5: 0.863},
+    9.5: {1: 0.978, 2: 0.939, 3: 0.907, 4: 0.878, 5: 0.850},
+    9:  {1: 0.955, 2: 0.922, 3: 0.892, 4: 0.863, 5: 0.837},
+    8.5: {1: 0.939, 2: 0.907, 3: 0.878, 4: 0.850, 5: 0.824},
+    8:  {1: 0.922, 2: 0.892, 3: 0.863, 4: 0.837, 5: 0.811},
+    7.5: {1: 0.907, 2: 0.878, 3: 0.850, 4: 0.824, 5: 0.799},
+    7:  {1: 0.892, 2: 0.863, 3: 0.837, 4: 0.811, 5: 0.786},
+    6.5: {1: 0.878, 2: 0.850, 3: 0.824, 4: 0.799, 5: 0.774},
+    6:  {1: 0.863, 2: 0.837, 3: 0.811, 4: 0.786, 5: 0.762}
 }
 
 @dataclass
-class WorkoutSet:
-    exercise: str
-    weight: float
-    target_reps: int
-    actual_reps: Optional[int] = None
-    rpe: Optional[float] = None
-    completed: bool = False
+class ExerciseVariant:
+    base_lift: str
+    modifiers: List[str] = field(default_factory=list)
     
-    def calculate_e1rm(self) -> Optional[float]:
-        """Calculate e1RM using RTS table"""
-        if not self.actual_reps or not self.rpe:
-            return None
-            
-        # Find closest RPE in table (e.g., treat 8.2 as 8.0 or 8.5)
-        available_rpes = sorted(RTS_TABLE.keys())
-        closest_rpe = min(available_rpes, key=lambda x: abs(x - self.rpe))
-        
-        if self.actual_reps in RTS_TABLE[closest_rpe]:
-            percentage = RTS_TABLE[closest_rpe][self.actual_reps]
-            return round(self.weight / percentage / 5) * 5
+    def display_name(self) -> str:
+        if not self.modifiers:
+            return self.base_lift
+        return f"{' '.join(self.modifiers)} {self.base_lift}"
+
+@dataclass
+class SetLog:
+    set_id: int
+    planned_weight: float
+    target_reps: str # Str because "5+"
+    actual_weight: float = 0.0
+    actual_reps: int = 0
+    rpe: float = 0.0
+    completed: bool = False
+
+    def get_e1rm(self) -> Optional[float]:
+        if self.actual_weight > 0 and self.actual_reps > 0 and self.rpe >= 6:
+            # Simple lookup logic for RTS
+            rpe_key = min(RTS_TABLE.keys(), key=lambda x: abs(x - self.rpe))
+            rep_key = min(RTS_TABLE[rpe_key].keys(), key=lambda x: abs(x - self.actual_reps))
+            pct = RTS_TABLE[rpe_key].get(rep_key, 1.0)
+            return round(self.actual_weight / pct)
         return None
 
-class Five31BlockProgram:
-    def __init__(self, maxes: Dict[str, float], tm_percent: float = 0.9):
-        self.maxes = maxes
-        self.tm_percent = tm_percent
-        self.training_days = ['mon', 'wed', 'fri'] 
-        
-    def generate_week(self, week_num: int) -> Dict:
-        block_type = self._get_block_type(week_num)
-        target_rpe = self._get_target_rpe(week_num)
-        
-        week_data = {
-            'week': week_num,
-            'block': block_type,
-            'target_rpe': target_rpe,
-            'days': {}
-        }
-        
-        for day in self.training_days:
-            main_lift = self._get_main_lift_for_day(day)
-            week_data['days'][day] = self._generate_day_workout(
-                week_num, day, main_lift, block_type, target_rpe
-            )
-            
-        return week_data
-    
-    def _generate_day_workout(self, week_num: int, day: str, main_lift: str, 
-                             block_type: str, target_rpe: Dict) -> Dict:
-        main_weights = self._calculate_main_weights(week_num, main_lift, block_type)
-        
-        workout = {
-            'main_lift': main_lift,
-            'block': block_type,
-            'target_rpe': target_rpe,
-            'exercises': [
-                {
-                    'name': main_lift.title(),
-                    'type': 'main',
-                    'sets': self._get_main_sets(block_type),
-                    'weights': main_weights,
-                    'warmup': self._generate_warmup(main_lift, main_weights[0])
-                },
-                {
-                    'name': f'Supplemental {main_lift.title()}',
-                    'type': 'supplemental',
-                    'sets': '5x5',
-                    'weight': main_weights[0]  # FSL weight (First set weight)
-                },
-                {
-                    'name': 'Assistance (Push/Pull/Core)',
-                    'type': 'accessory',
-                    'sets': '50 reps total',
-                    'weight': 'Varied'
-                }
-            ]
-        }
-        return workout
-    
-    def _calculate_main_weights(self, week_num: int, lift: str, block_type: str) -> List[float]:
-        tm = self.maxes[lift] * self.tm_percent
-        
-        # Block-specific TM adjustments
-        if block_type == '3s':
-            tm += 5 if lift == 'bench' else 10
-        elif block_type == 'peak':
-            tm += 10 if lift == 'bench' else 20
-            
-        if block_type == '5s':
-            percentages = [0.65, 0.75, 0.85]
-        elif block_type == '3s':
-            percentages = [0.70, 0.80, 0.90]
-        elif block_type == 'peak':
-            percentages = [0.75, 0.85, 0.95]
-        else: # deload
-            percentages = [0.70, 0.75, 0.80]
-            
-        return [round(tm * p / 5) * 5 for p in percentages]
-    
-    def _get_block_type(self, week_num: int) -> str:
-        if week_num <= 3: return '5s'
-        elif week_num <= 6: return '3s'
-        elif week_num <= 8: return 'peak'
-        else: return 'deload'
-    
-    def _get_target_rpe(self, week_num: int) -> Dict:
-        rpe_targets = {
-            1: {'min': 7, 'max': 8, 'desc': '2-3 RIR'},
-            2: {'min': 8, 'max': 8, 'desc': '2 RIR'},
-            3: {'min': 8, 'max': 9, 'desc': '1-2 RIR'},
-            4: {'min': 8, 'max': 8, 'desc': '2 RIR'},
-            5: {'min': 8.5, 'max': 9, 'desc': '1 RIR'},
-            6: {'min': 9, 'max': 9.5, 'desc': '0-1 RIR'},
-            7: {'min': 9, 'max': 9.5, 'desc': '0-1 RIR'},
-            8: {'min': 9.5, 'max': 10, 'desc': 'Max Effort'},
-            9: {'min': 6, 'max': 7, 'desc': 'Deload'}
-        }
-        return rpe_targets.get(week_num, {'min': 7, 'max': 8, 'desc': ''})
-    
-    def _get_main_lift_for_day(self, day: str) -> str:
-        return {'mon': 'squat', 'wed': 'bench', 'fri': 'deadlift'}.get(day, 'squat')
-    
-    def _get_main_sets(self, block_type: str) -> str:
-        return {'5s': '5/5/5+', '3s': '3/3/3+', 'peak': '5/3/1+', 'deload': '5/5/5'}.get(block_type, '5/5/5')
-    
-    def _generate_warmup(self, lift: str, first_work_weight: float) -> List[Dict]:
-        warmup_percentages = [0.4, 0.5, 0.6]
-        warmup_weights = [round(self.maxes[lift] * p / 5) * 5 for p in warmup_percentages]
-        warmup_sets = []
-        for i, weight in enumerate(warmup_weights):
-            if weight < first_work_weight:
-                warmup_sets.append({'weight': weight, 'reps': 5, 'desc': 'Warmup'})
-        return warmup_sets
-
 # ==========================================
-# 2. STREAMLIT INTERFACE
+# 2. HELPER FUNCTIONS
 # ==========================================
 
-st.set_page_config(page_title="5/3/1 Smart Block", page_icon="🧠")
+def get_week_schedule(start_date, week_num):
+    # Generates dates for the selected training week
+    # Assuming start_date is Monday of Week 1
+    week_start = start_date + timedelta(weeks=week_num-1)
+    return {
+        'Mon': week_start,
+        'Wed': week_start + timedelta(days=2),
+        'Fri': week_start + timedelta(days=4)
+    }
 
-st.title("5/3/1 Smart Block Manager")
-st.markdown("Based on 5s/3s/Peak Block Model with RPE integration")
+def calculate_plate_math(weight):
+    if weight < 45: return "Just Bar"
+    rem = (weight - 45) / 2
+    plates = []
+    for p in [45, 25, 10, 5, 2.5]:
+        while rem >= p:
+            plates.append(str(p))
+            rem -= p
+    return "+".join(plates) if plates else "Bar"
 
-# --- SIDEBAR: Configuration ---
+# ==========================================
+# 3. INTERFACE CONSTRUCTION
+# ==========================================
+
+st.title("📅 5/3/1 Training Calendar")
+
+# --- Sidebar: Setup & Exercises ---
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header("⚙️ Configuration")
     
-    st.subheader("Current Maxes")
-    # Using session state maxes if they exist, else default
-    sq = st.number_input("Squat", value=465, step=5)
-    bp = st.number_input("Bench", value=300, step=5)
-    dl = st.number_input("Deadlift", value=560, step=5)
+    # 1. Exercise Library (Base + Modifiers)
+    st.subheader("Exercise Builder")
+    base_lift = st.selectbox("Base Lift", ["Squat", "Bench", "Deadlift", "Overhead Press", "Row"])
+    modifiers = st.multiselect("Modifiers", ["Paused", "Tempo (3-0-3)", "SSB", "Deficit", "Pin", "Spoto"])
     
-    st.subheader("Program Status")
-    week_input = st.number_input("Current Week (1-9)", min_value=1, max_value=9, value=1)
-    
-    # Initialize the Program
-    maxes = {'squat': sq, 'bench': bp, 'deadlift': dl}
-    program = Five31BlockProgram(maxes)
+    current_variant = ExerciseVariant(base_lift, modifiers)
+    st.info(f"Selected: **{current_variant.display_name()}**")
     
     st.divider()
     
-    # --- RPE CALCULATOR (Uses your WorkoutSet class!) ---
-    st.header("🧮 RPE Calculator")
-    st.caption("Calculate e1RM from any set")
+    # 2. Program Settings
+    current_week = st.selectbox("Current Week", range(1, 10), index=0)
+    tm_squat = st.number_input("Squat TM", value=415)
+    tm_bench = st.number_input("Bench TM", value=270)
     
-    with st.form("rpe_calc"):
-        c_weight = st.number_input("Weight", value=225)
-        c_reps = st.number_input("Reps", value=5)
-        c_rpe = st.number_input("RPE", value=8.0, step=0.5, min_value=1.0, max_value=10.0)
-        
-        if st.form_submit_button("Calculate"):
-            # Using your class logic here
-            test_set = WorkoutSet(exercise="Test", weight=c_weight, target_reps=c_reps, actual_reps=c_reps, rpe=c_rpe)
-            result = test_set.calculate_e1rm()
-            if result:
-                st.success(f"Estimated Max: **{result} lbs**")
-            else:
-                st.error("Could not calculate (Check inputs)")
+# --- Top: Calendar Navigation ---
+# We use columns to create a clickable "Week Strip"
+schedule = get_week_schedule(datetime.now().date() - timedelta(days=datetime.now().weekday()), current_week)
+selected_day = st.radio("Select Training Day:", list(schedule.keys()), horizontal=True, label_visibility="collapsed")
 
-# --- MAIN PAGE: Generate the Workout ---
-current_week_data = program.generate_week(week_input)
-rpe_info = current_week_data['target_rpe']
+st.markdown(f"### {selected_day} - {schedule[selected_day].strftime('%b %d')}")
+st.divider()
 
-# Header Info
-col1, col2, col3 = st.columns(3)
-col1.metric("Week", f"{week_input} / 9")
-col2.metric("Block Phase", current_week_data['block'].upper())
-col3.metric("Target Intensity", f"RPE {rpe_info['min']}-{rpe_info['max']}")
-st.info(f"💡 **Weekly Focus:** {rpe_info['desc']}")
+# ==========================================
+# 4. WORKOUT LOGGER (The Core Feature)
+# ==========================================
 
-# Display Tabs for Days
-tab_mon, tab_wed, tab_fri = st.tabs(["Monday (Squat)", "Wednesday (Bench)", "Friday (Deadlift)"])
+# Initialize Session State for the "Copy" feature
+if "workout_data" not in st.session_state:
+    st.session_state.workout_data = {}
 
-def render_day(day_key):
-    day_data = current_week_data['days'][day_key]
-    main_ex = day_data['exercises'][0] # Main Lift
-    supp_ex = day_data['exercises'][1] # Supplemental
-    
-    st.header(f"{day_data['main_lift'].title()}")
-    
-    # 1. Warmups
-    with st.expander("🔥 Warmup Sets", expanded=True):
-        warmup_df = pd.DataFrame(main_ex['warmup'])
-        if not warmup_df.empty:
-            st.dataframe(warmup_df[['desc', 'weight', 'reps']], hide_index=True, use_container_width=True)
-        else:
-            st.write("First working set is light enough to start.")
+# --- Generate "Planned" Data for the Day ---
+# (In real app, this logic comes from your Program Class)
+if selected_day == "Mon":
+    focus_lift = "Squat"
+    tm = tm_squat
+elif selected_day == "Wed":
+    focus_lift = "Bench"
+    tm = tm_bench
+else:
+    focus_lift = "Deadlift"
+    tm = 400
 
-    # 2. Main Work
-    st.subheader("🏋️ Main Work")
-    st.write(f"**Scheme:** {main_ex['sets']}")
+# Calculate specific weights for the selected week
+percents = [0.65, 0.75, 0.85] if current_week == 1 else [0.70, 0.80, 0.90]
+reps = [5, 5, "5+"]
+
+# Create a unique key for this specific workout day
+workout_key = f"w{current_week}_{selected_day}_{focus_lift}"
+
+# Initialize this day's data if not exists
+if workout_key not in st.session_state.workout_data:
+    st.session_state.workout_data[workout_key] = [
+        SetLog(i+1, round(tm*p/5)*5, r) for i, (p, r) in enumerate(zip(percents, reps))
+    ]
+
+# Get the data wrapper for editing
+current_log = st.session_state.workout_data[workout_key]
+
+# --- The "Main Work" Section ---
+col_head, col_btn = st.columns([0.8, 0.2])
+col_head.subheader(f"🏋️ {focus_lift} - Main Work")
+
+# THE "FILL" BUTTON
+if col_btn.button("⤵️ Fill Planned"):
+    for s in current_log:
+        s.actual_weight = s.planned_weight
+    st.rerun()
+
+# Build the Grid Layout manually (Streamlit's data_editor is harder to style for this specific need)
+# Header Row
+cols = st.columns([0.5, 1, 0.5, 1, 1, 1, 1])
+cols[0].markdown("**Set**")
+cols[1].markdown("**Planned**")
+cols[2].markdown("➡️") # Arrow column
+cols[3].markdown("**Actual (lbs)**")
+cols[4].markdown("**Reps**")
+cols[5].markdown("**RPE**")
+cols[6].markdown("**e1RM**")
+
+top_set_e1rm = 0
+
+for i, set_data in enumerate(current_log):
+    c = st.columns([0.5, 1, 0.5, 1, 1, 1, 1])
     
-    # Create a nice table for the 3 main sets
-    main_sets_data = []
-    reps_list = main_ex['sets'].split('/')
+    # Set Number
+    c[0].write(f"#{set_data.set_id}")
     
-    for i, weight in enumerate(main_ex['weights']):
-        # Determine reps for this specific set
-        current_reps = reps_list[i] if i < len(reps_list) else reps_list[-1]
-        
-        main_sets_data.append({
-            "Set": i+1,
-            "Weight (lbs)": weight,
-            "Target Reps": current_reps,
-            "RPE Target": f"{rpe_info['min']}-{rpe_info['max']}"
-        })
+    # Planned
+    c[1].write(f"**{set_data.planned_weight}** x {set_data.target_reps}")
+    if i == 0: c[1].caption(calculate_plate_math(set_data.planned_weight))
     
-    df_main = pd.DataFrame(main_sets_data)
+    # Arrow (Visual only)
+    c[2].write("⤵")
     
-    # Editable Dataframe for tracking
-    edited_df = st.data_editor(
-        df_main,
-        column_config={
-            "Completed": st.column_config.CheckboxColumn(default=False),
-            "Actual Reps": st.column_config.NumberColumn(default=0),
-            "Actual RPE": st.column_config.NumberColumn(default=0.0)
-        },
-        hide_index=True,
-        use_container_width=True,
-        num_rows="fixed"
+    # Actual Weight Input
+    set_data.actual_weight = c[3].number_input(
+        "Weight", 
+        value=float(set_data.actual_weight), 
+        key=f"{workout_key}_w_{i}", 
+        label_visibility="collapsed"
     )
+    
+    # Reps Input
+    set_data.actual_reps = c[4].number_input(
+        "Reps", 
+        value=int(set_data.actual_reps), 
+        key=f"{workout_key}_r_{i}", 
+        label_visibility="collapsed"
+    )
+    
+    # RPE Input
+    set_data.rpe = c[5].number_input(
+        "RPE", 
+        value=float(set_data.rpe), 
+        step=0.5, 
+        key=f"{workout_key}_rpe_{i}", 
+        label_visibility="collapsed"
+    )
+    
+    # Real-time e1RM Calc
+    e1rm = set_data.get_e1rm()
+    if e1rm:
+        c[6].markdown(f"**{e1rm}**")
+        if e1rm > top_set_e1rm: top_set_e1rm = e1rm
+    else:
+        c[6].write("-")
 
-    # 3. Supplemental
-    st.subheader("🏗️ Supplemental")
-    st.write(f"**{supp_ex['name']}**")
-    st.write(f"{supp_ex['sets']} @ {supp_ex['weight']} lbs")
-    st.checkbox("Supplemental Completed", key=f"supp_{day_key}")
+st.divider()
 
-    # 4. Accessories
-    st.subheader("💪 Accessories")
-    st.info("50 reps total: Push / Pull / Single-Leg or Core")
+# --- Summary & Analytics ---
+if top_set_e1rm > 0:
+    st.success(f"🏆 **Session Best e1RM:** {top_set_e1rm} lbs")
+    # This is where you would save to database:
+    # update_max(focus_lift, top_set_e1rm)
 
-# Render the tabs
-with tab_mon:
-    render_day('mon')
-with tab_wed:
-    render_day('wed')
-with tab_fri:
-    render_day('fri')
+with st.expander("➕ Add Accessory Exercise"):
+    st.write("Use the Exercise Builder in the sidebar to define the lift, then click below.")
+    if st.button("Add to Session"):
+        st.toast(f"Added {current_variant.display_name()} to workout")
+
+# Debug viewing of data structure (Remove in production)
+# st.write(st.session_state.workout_data)
