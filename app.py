@@ -118,4 +118,28 @@ def generate_session(week, day, profile: UserProfile):
 # ==========================================
 # 3. STATE MANAGEMENT
 # ==========================================
-if 'view' not in st.session_state: st.
+if 'view' not in st.session_state:
+    st.session_state.view = 'calendar'
+
+if 'selected_workout' not in st.session_state:
+    st.session_state.selected_workout = None
+
+if 'user_profile' not in st.session_state:
+    st.session_state.user_profile = UserProfile()
+
+if 'added_accessories' not in st.session_state:
+    st.session_state.added_accessories = []
+
+def navigate_to(view_name, workout_meta=None):
+    st.session_state.view = view_name
+    if workout_meta:
+        st.session_state.selected_workout = workout_meta
+        st.session_state.added_accessories = []
+
+def fill_planned_callback(session_key):
+    for key in st.session_state:
+        if key.startswith(f"{session_key}_actual_weight_"):
+            index = key.split("_")[-1]
+            planned_key = f"{session_key}_planned_{index}"
+            if planned_key in st.session_state:
+                st.session_state[key] = st.session_state[planned_key]
