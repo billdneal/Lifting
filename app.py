@@ -17,14 +17,21 @@ LIFT_DB = {
     "Accessories": ["Triceps Extension", "Bicep Curls", "Leg Curls", "Leg Extensions", "Calf Raises", "Plank", "Ab Wheel"]
 }
 
+# Flattened list of all modifiers for dropdowns
+ALL_MODS = [
+    "Paused", "Tempo 3-0-3", "Pin Press", "Board Press", "Deficit", 
+    "Block Pull", "Spoto", "Bands", "Chains", "Close Grip", 
+    "Wide Grip", "Snatch Grip", "Fat Grip", "SSB", "Cambered Bar"
+]
+
 MODIFIER_DB = {
-    "Tempo / Pause": ["Paused (2ct)", "Paused (3ct)", "Tempo 3-0-3", "Tempo 5-0-0", "Dead Stop"],
-    "Range of Motion": ["Pin Press", "Board Press", "Deficit", "Block Pull", "Spoto", "High Handle"],
-    "Resistance / Load": ["Bands (Light)", "Bands (Average)", "Chains", "Weight Vest"],
-    "Stance / Grip": ["Close Grip", "Wide Grip", "Snatch Grip", "Fat Grip"]
+    "Tempo / Pause": ["Paused", "Tempo 3-0-3", "Tempo 5-0-0", "Dead Stop"],
+    "ROM": ["Pin Press", "Board Press", "Deficit", "Block Pull", "Spoto"],
+    "Resistance": ["Bands", "Chains", "Weight Vest"],
+    "Bar/Grip": ["Close Grip", "Wide Grip", "Snatch Grip", "Fat Grip", "SSB"]
 }
 
-# RTS RPE Table (Tuchscherer)
+# RTS RPE Table
 RTS_TABLE = {
     10: {1: 1.000, 2: 0.955, 3: 0.922, 4: 0.892, 5: 0.863, 6: 0.837, 7: 0.811, 8: 0.786},
     9.5: {1: 0.978, 2: 0.939, 3: 0.907, 4: 0.878, 5: 0.850, 6: 0.824, 7: 0.799, 8: 0.774},
@@ -48,6 +55,7 @@ class UserProfile:
     tm_percent: float = 0.9
     
     def get_tm(self, lift_name):
+        # Allow partial matches for pivots (e.g. "SSB Squat" uses "Squat" Max)
         if "Squat" in lift_name: return self.squat_max * self.tm_percent
         if "Bench" in lift_name: return self.bench_max * self.tm_percent
         if "Deadlift" in lift_name: return self.deadlift_max * self.tm_percent
@@ -65,36 +73,36 @@ class SetData:
     
     def get_e1rm(self) -> float:
         if self.actual_weight > 0 and self.actual_reps > 0 and self.rpe >= 6:
-            # Find closest keys in RTS table
             rpe_key = min(RTS_TABLE.keys(), key=lambda x: abs(x - self.rpe))
             if self.actual_reps in RTS_TABLE[rpe_key]:
                 pct = RTS_TABLE[rpe_key][self.actual_reps]
             else:
-                # Fallback if reps not in table (e.g. high reps)
                 pct = RTS_TABLE[rpe_key].get(min(RTS_TABLE[rpe_key].keys(), key=lambda x: abs(x - self.actual_reps)))
-                
             return round(self.actual_weight / pct)
         return 0.0
 
 def get_block_info(week):
-    if week <= 3:
-        return "5s Block (Volume)", "7-8 (2-3 RIR)"
-    elif week <= 6:
-        return "3s Block (Strength)", "8-9 (1-2 RIR)"
-    else:
-        return "Peak Block (Realization)", "9-10 (0-1 RIR)"
+    if week <= 3: return "5s Block (Volume)", "7-8 (2-3 RIR)"
+    elif week <= 6: return "3s Block (Strength)", "8-9 (1-2 RIR)"
+    else: return "Peak Block (Realization)", "9-10 (0-1 RIR)"
 
-def generate_session(week, day, profile: UserProfile):
-    # Determine Main Lift
-    if day == "Mon": lift = "Squat"
-    elif day == "Wed": lift = "Bench Press"
-    else: lift = "Trap Bar Deadlift"
+def generate_session(week, day, profile: UserProfile, lift_override=None, tm_modifier=1.0):
+    # Determine Main Lift (or use override)
+    if lift_override:
+        lift = lift_override
+    else:
+        if day == "Mon": lift = "Squat"
+        elif day == "Wed": lift = "Bench Press"
+        else: lift = "Trap Bar Deadlift"
     
     tm = profile.get_tm(lift)
     
     # Block Logic TM Bumps
     if week > 3: tm += (10 if "Bench" not in lift else 5)
     if week > 6: tm += (10 if "Bench" not in lift else 5)
+    
+    # Apply Pivot Modifier (e.g. 0.9 for a harder variation)
+    tm = tm * tm_modifier
 
     # Percentage Logic
     if week <= 3:
@@ -144,11 +152,9 @@ def navigate_to(view_name, workout_meta=None):
     st.session_state.view = view_name
     if workout_meta:
         st.session_state.selected_workout = workout_meta
-        # Clear accessories when opening a new workout
         st.session_state.added_accessories = []
 
 def fill_planned_callback(session_key):
-    # Copies Planned Weight -> Actual Weight input
     for key in st.session_state:
         if key.startswith(f"{session_key}_actual_weight_"):
             index = key.split("_")[-1]
@@ -175,8 +181,6 @@ with st.sidebar:
     
     # Category Selection
     cat_select = st.selectbox("Category", list(LIFT_DB.keys()))
-    
-    # Base Lift Selection
     base_select = st.selectbox("Base Lift", LIFT_DB[cat_select])
     
     # Modifiers
@@ -189,7 +193,6 @@ with st.sidebar:
                 if cols[i % 2].checkbox(mod, key=f"mod_{mod}"):
                     selected_mods.append(mod)
     
-    # Construct Name
     final_name = f"{' '.join(selected_mods)} {base_select}".strip()
     st.info(f"**{final_name}**")
     
@@ -229,30 +232,63 @@ if st.session_state.view == 'calendar':
 elif st.session_state.view == 'workout':
     meta = st.session_state.selected_workout
     week, day = meta['week'], meta['day']
-    lift_name, main_sets, supp_scheme, supp_pct = generate_session(week, day, st.session_state.user_profile)
-    session_key = f"w{week}_{day}_{lift_name}"
+    
+    # --- PIVOT / CUSTOMIZE LOGIC ---
+    # Determine default lift first
+    if day == "Mon": default_lift = "Squat"
+    elif day == "Wed": default_lift = "Bench Press"
+    else: default_lift = "Trap Bar Deadlift"
+
+    # UI for Pivot
+    with st.sidebar:
+        st.divider()
+        st.header("⚙️ Pivot / Customize")
+        st.caption("Need to swap the main lift or add modifiers?")
+        
+        # 1. Base Lift Swap
+        pivot_base = st.selectbox(
+            "Main Lift Base", 
+            LIFT_DB["Squat Pattern"] + LIFT_DB["Bench Pattern"] + LIFT_DB["Deadlift Pattern"],
+            index=0 if default_lift == "Squat" else (1 if default_lift == "Bench Press" else 2) 
+        )
+        
+        # 2. Modifiers
+        pivot_mods = st.multiselect("Main Lift Modifiers", ALL_MODS)
+        
+        # 3. TM Adjustment
+        tm_adj = st.slider("Training Max %", 50, 120, 100, 5, help="Lower this if doing a harder variation (e.g. Front Squat)")
+    
+    # Re-Generate Session with Overrides
+    full_lift_name = f"{' '.join(pivot_mods)} {pivot_base}".strip()
+    _, main_sets, supp_scheme, supp_pct = generate_session(
+        week, day, st.session_state.user_profile, 
+        lift_override=pivot_base, 
+        tm_modifier=tm_adj/100
+    )
+    
+    session_key = f"w{week}_{day}_{full_lift_name}"
     
     if st.button("← Back to Calendar"):
         navigate_to('calendar')
         st.rerun()
         
-    st.title(f"{day} • {lift_name}")
+    st.title(f"{day} • {full_lift_name}")
 
     # --- MAIN LIFT ---
     c_head, c_fill = st.columns([3, 1])
-    c_head.subheader(f"1️⃣ Main Lift: {lift_name}")
+    c_head.subheader(f"1️⃣ Main Work")
     if c_fill.button("⤵️ Fill Planned"):
         fill_planned_callback(session_key)
         st.rerun()
 
-    # Warmups (Read Only Table)
+    # Warmups
     warmups = [s for s in main_sets if s.id < 1]
     if warmups:
         with st.expander("🔥 Warmup Sets (Read Only)", expanded=False):
             w_df = pd.DataFrame([{"Weight": s.planned_weight, "Reps": 5} for s in warmups])
             st.table(w_df)
 
-    # Work Sets (Input Grid)
+    # Work Sets
     work_sets = [s for s in main_sets if s.id > 0]
     cols = st.columns([0.5, 1.5, 1.5, 1, 1, 1])
     cols[1].markdown("**Planned**")
@@ -263,54 +299,52 @@ elif st.session_state.view == 'workout':
 
     best_e1rm = 0
     for i, s in enumerate(work_sets):
-        # Store planned weight in state for "Fill" button to access
         st.session_state[f"{session_key}_planned_{i}"] = s.planned_weight
-        
         with st.container():
             c = st.columns([0.5, 1.5, 1.5, 1, 1, 1])
             c[0].write(f"#{s.id}")
             c[1].write(f"**{s.planned_weight}** x {s.target_reps}")
             
-            # INPUTS
             act_w = c[2].number_input("W", 0.0, step=5.0, key=f"{session_key}_actual_weight_{i}", label_visibility="collapsed")
             act_r = c[3].number_input("R", int(s.target_reps) if isinstance(s.target_reps, int) else 5, key=f"{session_key}_actual_reps_{i}", label_visibility="collapsed")
             act_rpe = c[4].number_input("RPE", 0.0, step=0.5, key=f"{session_key}_actual_rpe_{i}", label_visibility="collapsed")
             
-            # E1RM CALC
-            live_set = SetData(s.id, s.planned_weight, s.target_reps, act_w, act_r, act_rpe)
-            e1rm = live_set.get_e1rm()
-            
+            e1rm = SetData(s.id, s.planned_weight, s.target_reps, act_w, act_r, act_rpe).get_e1rm()
             if e1rm > 0:
                 c[5].markdown(f"**{int(e1rm)}**")
                 best_e1rm = max(best_e1rm, e1rm)
-            else:
-                c[5].write("-")
+            else: c[5].write("-")
 
-    if best_e1rm > 0:
-        st.success(f"🏆 Session Best: {int(best_e1rm)} lbs")
-    
+    if best_e1rm > 0: st.success(f"🏆 Session Best: {int(best_e1rm)} lbs")
     st.divider()
 
     # --- SUPPLEMENTAL ---
     st.subheader(f"2️⃣ Supplemental")
     
-    c_sel, c_inf = st.columns([1, 2])
+    c_sel, c_mod_supp = st.columns([1, 1])
     
-    # Lift Selector (Defaults to Main Lift pattern if found)
-    default_idx = 0
-    # Try to find a logical default in the lists
+    # Lift Selector
     all_lifts = LIFT_DB["Squat Pattern"] + LIFT_DB["Bench Pattern"] + LIFT_DB["Deadlift Pattern"] + LIFT_DB["Upper Pull"]
     
-    supp_lift = c_sel.selectbox("Lift", all_lifts, index=0)
+    # Try to keep the default aligned with main lift
+    try:
+        def_idx = all_lifts.index(pivot_base)
+    except ValueError:
+        def_idx = 0
+        
+    supp_lift = c_sel.selectbox("Lift", all_lifts, index=def_idx)
+    supp_mods = c_mod_supp.multiselect("Modifiers", ALL_MODS, key=f"{session_key}_supp_mods")
+    
+    supp_full_name = f"{' '.join(supp_mods)} {supp_lift}".strip()
     
     # Calc Target
     supp_tm = st.session_state.user_profile.get_tm(supp_lift)
     if week > 3: supp_tm += (10 if "Bench" not in supp_lift else 5)
     target_w = round((supp_tm * supp_pct) / 5) * 5
     
-    c_inf.info(f"**{supp_scheme}** | Target: {target_w} lbs")
+    st.info(f"**{supp_scheme}** | {supp_full_name} | Target: {target_w} lbs")
 
-    # Logging Grid
+    # Logging
     sc = st.columns([1, 1, 1])
     sc[0].markdown("Weight"); sc[1].markdown("Reps"); sc[2].markdown("RPE")
     for j in range(5):
@@ -323,19 +357,14 @@ elif st.session_state.view == 'workout':
 
     # --- ACCESSORIES ---
     st.subheader("3️⃣ Accessories")
-    st.caption("Use the Sidebar to build and add exercises.")
-
     if not st.session_state.added_accessories:
-        st.info("No accessories added yet.")
+        st.info("No accessories added yet. Check Sidebar ➡️")
     
     for idx, acc_name in enumerate(st.session_state.added_accessories):
         st.markdown(f"**{acc_name}**")
         ac = st.columns([1, 1, 1])
-        ac[0].caption("Weight")
-        ac[1].caption("Reps")
-        ac[2].caption("RPE")
-        
-        for k in range(3): # Default 3 sets
+        ac[0].caption("Weight"); ac[1].caption("Reps"); ac[2].caption("RPE")
+        for k in range(3):
             ar = st.columns([1, 1, 1])
             ar[0].number_input("W", 0.0, step=5.0, key=f"{session_key}_acc_{idx}_w_{k}", label_visibility="collapsed")
             ar[1].number_input("R", 10, step=1, key=f"{session_key}_acc_{idx}_r_{k}", label_visibility="collapsed")
