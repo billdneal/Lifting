@@ -1,22 +1,18 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 
-st.title("🔌 Connection Test")
+st.title("🔌 Connection Test Phase 2")
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     st.write("✅ Connection Object Created")
     
-    # Try to read the 'Library' tab
-    st.write("⏳ Attempting to read 'Library' tab...")
-    df = conn.read(worksheet="Library")
+    # READ DEFAULT (No worksheet name specified = Reads the first tab)
+    st.write("⏳ Attempting to read the FIRST tab (whatever it is)...")
+    df = conn.read() 
     
-    st.success("🎉 Success! Data found:")
+    st.success("🎉 Success! Found data in the first tab:")
     st.dataframe(df)
 
 except Exception as e:
     st.error(f"❌ Failed: {e}")
-    st.write("Check your secrets.toml formatting.")
-    # This prints exactly what Streamlit sees in your secrets (safe to view only for you)
-    st.write("Debug info:")
-    st.json(st.secrets)
