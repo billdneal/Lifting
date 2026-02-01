@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import date
+
 # ==========================================
 # 1. CONFIG & CACHING
 # ==========================================
@@ -239,7 +240,8 @@ if st.session_state.workout_queue:
         new_logs = pd.DataFrame(logs_to_save)
         new_logs = new_logs[new_logs['Weight'] > 0]
         if not new_logs.empty:
-            updated = pd.concat([conn.read(worksheet="Logs", ttl=0), new_logs], ignore_index=True)
+            # FIX: Added dtype=str here to safely Append without Crashing
+            updated = pd.concat([conn.read(worksheet="Logs", ttl=0, dtype=str), new_logs], ignore_index=True)
             conn.update(worksheet="Logs", data=updated)
             st.balloons()
             st.success("Session Saved!")
