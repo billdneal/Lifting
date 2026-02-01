@@ -51,9 +51,11 @@ def get_profile_max(df_profile, lift_name):
     return 0.0
 
 try:
+    # Added "Directory" to the load list
     df_lib = conn.read(worksheet="Master", ttl=0, dtype=str)
     df_logs = conn.read(worksheet="Logs", ttl=0, dtype=str)
     df_profile = conn.read(worksheet="Profile", ttl=0, dtype=str)
+    df_dir = conn.read(worksheet="Directory", ttl=0, dtype=str) # NEW!
     RPE_DATA = load_rpe_table()
     
     # Safe Conversions
@@ -88,13 +90,10 @@ st.caption("⚡ IronOS Command")
 # --- A. SELECTOR / BUILDER ---
 if not st.session_state.workout_queue:
     
-    # 1. Get List of Templates + Add "Custom Build"
     templates = list(df_lib['Template'].unique()) if not df_lib.empty else []
     if "Custom Build" not in templates: templates.insert(0, "Custom Build")
     
-    # 2. Controls
     c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-    
     sel_temp = c1.selectbox("Program", templates, index=None, label_visibility="collapsed", placeholder="Select Program...")
 
     # --- MODE 1: STANDARD TEMPLATE ---
@@ -128,10 +127,14 @@ if not st.session_state.workout_queue:
 
     # --- MODE 2: CUSTOM BUILDER ---
     elif sel_temp == "Custom Build":
-        # Get all unique exercises from Profile (Primary) and Library (Secondary)
-        all_exercises = sorted(list(set(df_profile['Lift'].unique().tolist() + df_lib['Exercise'].unique().tolist())))
+        # MERGE LISTS: Profile + Master + Directory
+        list_profile = df_profile['Lift'].unique().tolist() if not df_profile.empty else []
+        list_lib = df_lib['Exercise'].unique().tolist() if not df_lib.empty else []
+        list_dir = df_dir['Exercise'].unique().tolist() if 'df_dir' in locals() and not df_dir.empty else []
         
-        # Builder UI
+        # Combine and Sort
+        all_exercises = sorted(list(set(list_profile + list_lib + list_dir)))
+        
         st.info("🛠️ **Custom Builder Active**")
         b1, b2, b3, b4 = st.columns([2, 1, 1, 1])
         
@@ -141,24 +144,17 @@ if not st.session_state.workout_queue:
         
         if b4.button("Add +"):
             if new_ex:
-                # Calculate Guide Weight immediately
-                base_max = get_profile_max(df_profile, new_ex)
-                
-                # Check if queue exists in session (temp storage for builder)
                 if 'builder_queue' not in st.session_state: st.session_state.builder_queue = []
-                
                 st.session_state.builder_queue.append({
                     "Category": "Custom",
                     "Exercise": new_ex,
                     "Sets": new_sets,
                     "Reps": new_reps,
-                    "RPE_Target": "",
-                    "Guide_Weight": 0, # Custom usually means auto-regulation, or add weight input if needed
+                    "Guide_Weight": 0,
                     "Meta": {"Template": "Custom", "Week": 1, "Day": 1}
                 })
                 st.rerun()
         
-        # Display the built queue
         if 'builder_queue' in st.session_state and st.session_state.builder_queue:
             st.markdown("---")
             for q in st.session_state.builder_queue:
@@ -178,7 +174,7 @@ if st.session_state.workout_queue:
     st.markdown("---")
     
     for i, ex in enumerate(st.session_state.workout_queue):
-        cat_color = "red" if "main" in ex['Category'].lower() else "blue"
+        cat_color = "red" if "main" in ex.get('Category','').lower() else "blue"
         header = f"**:{cat_color}[{ex['Category']}] {ex['Exercise']}** | *Target: {ex['Guide_Weight']} lbs × {ex['Reps']}*"
         st.markdown(header)
         
@@ -198,7 +194,7 @@ if st.session_state.workout_queue:
                     "Program": ex['Meta'].get('Template'),
                     "Week": ex['Meta'].get('Week'),
                     "Day": ex['Meta'].get('Day'),
-                    "Category": ex['Category'],
+                    "Category": ex.get('Category', 'Accessory'),
                     "Exercise": ex['Exercise'],
                     "Set": s+1,
                     "Weight": w,
