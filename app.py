@@ -9,13 +9,13 @@ from datetime import date
 st.set_page_config(page_title="IronOS", page_icon="⚡", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# CSS: Remove padding & style inputs
 st.markdown("""
     <style>
         .block-container {padding-top: 1rem; padding-bottom: 2rem; padding-left: 1rem; padding-right: 1rem;}
         div[data-testid="stExpander"] div[role="button"] p {font-size: 1rem; font-weight: bold;}
         .stNumberInput input {height: 35px; font-size: 0.9rem;} 
         div[data-baseweb="select"] > div {min-height: 35px;}
+        button {height: 38px; padding-top: 0px !important; padding-bottom: 0px !important;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -56,6 +56,7 @@ try:
     df_profile = conn.read(worksheet="Profile", ttl=0, dtype=str)
     RPE_DATA = load_rpe_table()
     
+    # Safe Conversions
     if not df_lib.empty:
         df_lib.dropna(how='all', inplace=True)
         df_lib['Sets'] = pd.to_numeric(df_lib['Sets'], errors='coerce').fillna(0).astype(int)
@@ -84,96 +85,114 @@ def copy_plan_to_actual(index, sets):
 # ==========================================
 st.caption("⚡ IronOS Command")
 
-# --- A. SELECTOR (UPDATED WITH LABELS) ---
+# --- A. SELECTOR / BUILDER ---
 if not st.session_state.workout_queue:
-    if not df_lib.empty:
-        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-        templates = df_lib['Template'].unique()
+    
+    # 1. Get List of Templates + Add "Custom Build"
+    templates = list(df_lib['Template'].unique()) if not df_lib.empty else []
+    if "Custom Build" not in templates: templates.insert(0, "Custom Build")
+    
+    # 2. Controls
+    c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+    
+    sel_temp = c1.selectbox("Program", templates, index=None, label_visibility="collapsed", placeholder="Select Program...")
+
+    # --- MODE 1: STANDARD TEMPLATE ---
+    if sel_temp and sel_temp != "Custom Build":
+        weeks = sorted(df_lib[df_lib['Template'] == sel_temp]['Week'].unique())
+        sel_week = c2.selectbox("Week", weeks, index=None, label_visibility="collapsed", placeholder="Week...")
         
-        # Added index=None so it starts blank and shows the "Program" placeholder
-        sel_temp = c1.selectbox(
-            "Program", 
-            templates, 
-            index=None, 
-            label_visibility="collapsed", 
-            placeholder="Select Program..."
-        )
-        
-        if sel_temp:
-            weeks = sorted(df_lib[df_lib['Template'] == sel_temp]['Week'].unique())
-            sel_week = c2.selectbox(
-                "Week", 
-                weeks, 
-                index=None,
-                label_visibility="collapsed", 
-                placeholder="Week..."
-            )
+        if sel_week:
+            days = sorted(df_lib[(df_lib['Template'] == sel_temp) & (df_lib['Week'] == sel_week)]['Day'].unique())
+            sel_day = c3.selectbox("Day", days, index=None, label_visibility="collapsed", placeholder="Day...")
             
-            # Only show Day if Week is picked
-            if sel_week:
-                days = sorted(df_lib[(df_lib['Template'] == sel_temp) & (df_lib['Week'] == sel_week)]['Day'].unique())
-                sel_day = c3.selectbox(
-                    "Day", 
-                    days, 
-                    index=None,
-                    label_visibility="collapsed", 
-                    placeholder="Day..."
-                )
+            if sel_day:
+                if c4.button("🚀 GO", type="primary", use_container_width=True):
+                    rows = df_lib[(df_lib['Template'] == sel_temp) & (df_lib['Week'] == sel_week) & (df_lib['Day'] == sel_day)]
+                    st.session_state.workout_queue = []
+                    for _, row in rows.iterrows():
+                        base_max = get_profile_max(df_profile, row['Exercise'])
+                        pct = float(row['Pct'])
+                        guide = int((base_max * pct) / 5) * 5 if pct > 0 else 0
+                        
+                        st.session_state.workout_queue.append({
+                            "Category": str(row.get('Category', 'Accessory')),
+                            "Exercise": row['Exercise'],
+                            "Sets": int(row['Sets']),
+                            "Reps": str(row['Reps']),
+                            "RPE_Target": str(row.get('RPE', '')),
+                            "Guide_Weight": guide,
+                            "Meta": {"Template": sel_temp, "Week": sel_week, "Day": sel_day}
+                        })
+                    st.rerun()
+
+    # --- MODE 2: CUSTOM BUILDER ---
+    elif sel_temp == "Custom Build":
+        # Get all unique exercises from Profile (Primary) and Library (Secondary)
+        all_exercises = sorted(list(set(df_profile['Lift'].unique().tolist() + df_lib['Exercise'].unique().tolist())))
+        
+        # Builder UI
+        st.info("🛠️ **Custom Builder Active**")
+        b1, b2, b3, b4 = st.columns([2, 1, 1, 1])
+        
+        new_ex = b1.selectbox("Exercise", all_exercises, index=None, placeholder="Pick Lift")
+        new_sets = b2.number_input("Sets", min_value=1, value=3)
+        new_reps = b3.text_input("Reps", value="5")
+        
+        if b4.button("Add +"):
+            if new_ex:
+                # Calculate Guide Weight immediately
+                base_max = get_profile_max(df_profile, new_ex)
                 
-                # Only show Load button if all 3 are picked
-                if sel_day:
-                    if c4.button("🚀 GO", type="primary", use_container_width=True):
-                        rows = df_lib[(df_lib['Template'] == sel_temp) & (df_lib['Week'] == sel_week) & (df_lib['Day'] == sel_day)]
-                        st.session_state.workout_queue = []
-                        for _, row in rows.iterrows():
-                            base_max = get_profile_max(df_profile, row['Exercise'])
-                            pct = float(row['Pct'])
-                            guide = int((base_max * pct) / 5) * 5 if pct > 0 else 0
-                            
-                            st.session_state.workout_queue.append({
-                                "Category": str(row.get('Category', 'Accessory')),
-                                "Exercise": row['Exercise'],
-                                "Sets": int(row['Sets']),
-                                "Reps": str(row['Reps']),
-                                "RPE_Target": str(row.get('RPE', '')),
-                                "Guide_Weight": guide,
-                                "Note": str(row.get('Notes', '')),
-                                "Meta": {"Template": sel_temp, "Week": sel_week, "Day": sel_day}
-                            })
-                        st.rerun()
+                # Check if queue exists in session (temp storage for builder)
+                if 'builder_queue' not in st.session_state: st.session_state.builder_queue = []
+                
+                st.session_state.builder_queue.append({
+                    "Category": "Custom",
+                    "Exercise": new_ex,
+                    "Sets": new_sets,
+                    "Reps": new_reps,
+                    "RPE_Target": "",
+                    "Guide_Weight": 0, # Custom usually means auto-regulation, or add weight input if needed
+                    "Meta": {"Template": "Custom", "Week": 1, "Day": 1}
+                })
+                st.rerun()
+        
+        # Display the built queue
+        if 'builder_queue' in st.session_state and st.session_state.builder_queue:
+            st.markdown("---")
+            for q in st.session_state.builder_queue:
+                st.text(f"• {q['Exercise']} ({q['Sets']} x {q['Reps']})")
+            
+            if st.button("🚀 Start Custom Session", type="primary"):
+                st.session_state.workout_queue = st.session_state.builder_queue
+                del st.session_state.builder_queue
+                st.rerun()
+
 
 # --- B. COMPACT LOGGING GRID ---
 if st.session_state.workout_queue:
     logs_to_save = []
     
-    # Header Row
     if st.button("Clear Session"): st.session_state.workout_queue = []; st.rerun()
-    
     st.markdown("---")
     
     for i, ex in enumerate(st.session_state.workout_queue):
-        # 1. Compact Header Line
         cat_color = "red" if "main" in ex['Category'].lower() else "blue"
-        st.markdown(f"**:{cat_color}[{ex['Category']}] {ex['Exercise']}** | *Target: {ex['Guide_Weight']} lbs × {ex['Reps']}*")
+        header = f"**:{cat_color}[{ex['Category']}] {ex['Exercise']}** | *Target: {ex['Guide_Weight']} lbs × {ex['Reps']}*"
+        st.markdown(header)
         
-        # 2. Spreadsheet Row
-        # Calculate columns needed: 1 for Button + 1 for each Set
         cols = st.columns(ex['Sets'] + 1)
-        
-        # The Copy Button (First Column)
         if cols[0].button("⤵", key=f"cp_{i}", help="Fill all sets"):
             copy_plan_to_actual(i, ex['Sets'])
             st.rerun()
 
-        # The Set Inputs (Remaining Columns)
         for s in range(ex['Sets']):
             with cols[s+1]:
-                # Compact Stack
                 w = st.number_input(f"s{s+1}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed", placeholder="Lbs")
                 r = st.number_input(f"r{s+1}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed", placeholder="Reps")
                 rpe = st.number_input(f"rpe{s+1}", value=0.0, step=0.5, key=f"rpe_{i}_{s}", label_visibility="collapsed", placeholder="RPE")
                 
-                # Queue for saving
                 logs_to_save.append({
                     "Date": date.today().strftime("%Y-%m-%d"),
                     "Program": ex['Meta'].get('Template'),
@@ -188,7 +207,6 @@ if st.session_state.workout_queue:
                 })
         st.divider()
 
-    # Save Button
     if st.button("✅ Finish & Save Log", type="primary", use_container_width=True):
         new_logs = pd.DataFrame(logs_to_save)
         new_logs = new_logs[new_logs['Weight'] > 0]
