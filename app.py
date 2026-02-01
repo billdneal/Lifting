@@ -247,7 +247,7 @@ if st.session_state.workout_queue:
             st.session_state.workout_queue = []
             st.rerun()
         else:
-            st.warning("No data logged.") date
+            st.warning("No data logged.")
 
 # ==========================================
 # 1. CONFIG & CACHING
