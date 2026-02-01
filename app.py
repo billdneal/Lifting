@@ -44,7 +44,7 @@ def calc_load_from_max(one_rm, reps, rpe, rpe_table):
 # 2. LOAD DATA
 # ==========================================
 try:
-    df_lib = conn.read(worksheet="Library")
+    df_lib = conn.read(worksheet="Master")
     df_logs = conn.read(worksheet="Logs")
     df_profile = conn.read(worksheet="Profile")
     df_readiness = conn.read(worksheet="Readiness")
