@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import date
 
 # ==========================================
-# 1. COMPACT CONFIG & CSS
+# 1. CONFIG & CSS
 # ==========================================
 st.set_page_config(page_title="IronOS", page_icon="⚡", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -20,25 +20,44 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DATA LOADING (SAFE MODE)
+# 2. OPTIMIZED DATA LOADING (CACHED)
 # ==========================================
+# This function only runs ONCE every 10 mins, saving your API quota
 @st.cache_data(ttl=600)
-def load_rpe_table():
+def load_static_data():
     try:
-        df = conn.read(worksheet="Constants", ttl=0, dtype=str)
+        # Load all "Read Only" tabs at once
+        df_lib = conn.read(worksheet="Master", ttl=0, dtype=str)
+        df_profile = conn.read(worksheet="Profile", ttl=0, dtype=str)
+        df_dir = conn.read(worksheet="Directory", ttl=0, dtype=str)
+        df_const = conn.read(worksheet="Constants", ttl=0, dtype=str)
+        
+        # Parse RPE Table
         rpe_dict = {}
-        for _, row in df.iterrows():
+        for _, row in df_const.iterrows():
             rpe_val_str = str(row['RPE']).strip()
             if not rpe_val_str or rpe_val_str.lower() == 'nan': continue
             rpe_val = float(rpe_val_str)
             rpe_dict[rpe_val] = {}
-            for c in df.columns:
+            for c in df_const.columns:
                 if c != 'RPE' and str(c).isdigit():
                     val = str(row[c]).strip()
                     if val and val.lower() != 'nan':
                          rpe_dict[rpe_val][int(c)] = float(val)
-        return rpe_dict
-    except: return {10: {1: 1.0}} 
+
+        # Cleanup Dataframes
+        if not df_lib.empty:
+            df_lib.dropna(how='all', inplace=True)
+            df_lib['Sets'] = pd.to_numeric(df_lib['Sets'], errors='coerce').fillna(0).astype(int)
+            df_lib['Pct'] = pd.to_numeric(df_lib['Pct'], errors='coerce').fillna(0.0)
+        
+        if not df_profile.empty:
+            df_profile['Max'] = pd.to_numeric(df_profile['Max'], errors='coerce').fillna(0.0)
+            
+        return df_lib, df_profile, df_dir, rpe_dict
+
+    except Exception as e:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {10: {1: 1.0}}
 
 def get_profile_max(df_profile, lift_name):
     if df_profile.empty: return 0.0
@@ -50,24 +69,15 @@ def get_profile_max(df_profile, lift_name):
             except: return 0.0
     return 0.0
 
-try:
-    # Added "Directory" to the load list
-    df_lib = conn.read(worksheet="Master", ttl=0, dtype=str)
-    df_logs = conn.read(worksheet="Logs", ttl=0, dtype=str)
-    df_profile = conn.read(worksheet="Profile", ttl=0, dtype=str)
-    df_dir = conn.read(worksheet="Directory", ttl=0, dtype=str) # NEW!
-    RPE_DATA = load_rpe_table()
-    
-    # Safe Conversions
-    if not df_lib.empty:
-        df_lib.dropna(how='all', inplace=True)
-        df_lib['Sets'] = pd.to_numeric(df_lib['Sets'], errors='coerce').fillna(0).astype(int)
-        df_lib['Pct'] = pd.to_numeric(df_lib['Pct'], errors='coerce').fillna(0.0)
-    if not df_profile.empty:
-        df_profile['Max'] = pd.to_numeric(df_profile['Max'], errors='coerce').fillna(0.0)
+# --- SIDEBAR CONTROLS ---
+with st.sidebar:
+    st.write("## ⚙️ Controls")
+    if st.button("🔄 Refresh Data"):
+        st.cache_data.clear()
+        st.rerun()
 
-except Exception as e:
-    st.error(f"Data Load Error: {e}"); st.stop()
+# --- LOAD DATA ---
+df_lib, df_profile, df_dir, RPE_DATA = load_static_data()
 
 # ==========================================
 # 3. SESSION LOGIC
@@ -83,7 +93,7 @@ def copy_plan_to_actual(index, sets):
         except: st.session_state[f"r_{index}_{s}"] = 5
 
 # ==========================================
-# 4. COMPACT UI
+# 4. APP INTERFACE
 # ==========================================
 st.caption("⚡ IronOS Command")
 
@@ -127,12 +137,10 @@ if not st.session_state.workout_queue:
 
     # --- MODE 2: CUSTOM BUILDER ---
     elif sel_temp == "Custom Build":
-        # MERGE LISTS: Profile + Master + Directory
         list_profile = df_profile['Lift'].unique().tolist() if not df_profile.empty else []
         list_lib = df_lib['Exercise'].unique().tolist() if not df_lib.empty else []
-        list_dir = df_dir['Exercise'].unique().tolist() if 'df_dir' in locals() and not df_dir.empty else []
+        list_dir = df_dir['Exercise'].unique().tolist() if not df_dir.empty else []
         
-        # Combine and Sort
         all_exercises = sorted(list(set(list_profile + list_lib + list_dir)))
         
         st.info("🛠️ **Custom Builder Active**")
@@ -179,7 +187,7 @@ if st.session_state.workout_queue:
         st.markdown(header)
         
         cols = st.columns(ex['Sets'] + 1)
-        if cols[0].button("⤵", key=f"cp_{i}", help="Fill all sets"):
+        if cols[0].button("⤵", key=f"cp_{i}", help="Fill all"):
             copy_plan_to_actual(i, ex['Sets'])
             st.rerun()
 
@@ -207,10 +215,15 @@ if st.session_state.workout_queue:
         new_logs = pd.DataFrame(logs_to_save)
         new_logs = new_logs[new_logs['Weight'] > 0]
         if not new_logs.empty:
-            updated = pd.concat([conn.read(worksheet="Logs", ttl=0, dtype=str), new_logs], ignore_index=True)
-            conn.update(worksheet="Logs", data=updated)
-            st.toast("Saved Successfully!", icon="🎉")
-            st.session_state.workout_queue = []
-            st.rerun()
+            # We only read the Logs sheet at the very last second to save quota
+            try:
+                current_logs = conn.read(worksheet="Logs", ttl=0, dtype=str)
+                updated = pd.concat([current_logs, new_logs], ignore_index=True)
+                conn.update(worksheet="Logs", data=updated)
+                st.toast("Saved Successfully!", icon="🎉")
+                st.session_state.workout_queue = []
+                st.rerun()
+            except Exception as e:
+                st.error(f"Save Failed: {e}")
         else:
             st.warning("Enter some weights first.")
