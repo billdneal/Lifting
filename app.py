@@ -175,14 +175,12 @@ if not st.session_state.workout_queue:
             sel_day = st.selectbox("Day", days, index=None)
             
             if sel_day and st.button("🚀 Load", type="primary", use_container_width=True):
-                # FIXED: Broken filtering logic is now safer
                 mask = (
                     (df_lib['Template'] == sel_temp) & 
                     (df_lib['Week'] == sel_week) & 
                     (df_lib['Day'] == sel_day)
                 )
                 rows = df_lib[mask]
-                
                 st.session_state.workout_queue = []
                 for _, row in rows.iterrows():
                     base_max = get_profile_max(df_profile, row['Exercise'])
@@ -191,15 +189,12 @@ if not st.session_state.workout_queue:
                     
                     pct_str = str(row['Pct']) if pd.notna(row['Pct']) else "0"
                     pct_list = parse_multi_value(pct_str, n_sets, is_number=True)
-                    
                     rep_str = str(row['Reps']) if pd.notna(row['Reps']) else "5"
                     rep_list = parse_multi_value(rep_str, n_sets, is_number=False)
-                    
                     guide_list = []
                     for p in pct_list:
                         gw = int((base_max * p) / 5) * 5 if p > 0 else 0
                         guide_list.append(gw)
-                        
                     st.session_state.workout_queue.append({
                         "Category": str(row.get('Category', 'Accessory')),
                         "Exercise": row['Exercise'], "Sets": n_sets,
@@ -233,13 +228,15 @@ if st.session_state.workout_queue:
                         st.info(f"**Set {s+1}:** {t_weight} lbs × {t_reps} reps")
 
                 with tab_actual:
-                    col_lbs, col_reps, col_rpe = st.columns(3)
+                    # UPDATED: Use ratios [1.5, 1.5, 1.5, 4] to squish inputs to the LEFT
+                    col_lbs, col_reps, col_rpe, _ = st.columns([1.5, 1.5, 1.5, 4])
                     col_lbs.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
                     col_reps.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
                     col_rpe.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
                     
                     for s in range(ex['Sets']):
-                        c1, c2, c3 = st.columns(3)
+                        # Same squished layout for rows
+                        c1, c2, c3, _ = st.columns([1.5, 1.5, 1.5, 4])
                         w = c1.number_input(f"w{s}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed")
                         r = c2.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
                         rpe = c3.number_input(f"rpe{s}", value=0.0, step=0.5, key=f"rpe_{i}_{s}", label_visibility="collapsed")
@@ -271,7 +268,6 @@ if st.session_state.workout_queue:
                     r = c5.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
                     rpe = c6.number_input(f"rpe{s}", value=0.0, step=0.5, key=f"rpe_{i}_{s}", label_visibility="collapsed")
                     
-                    # Log appending happens here too, duplicates removed at save
                     logs_to_save.append({
                         "Date": date.today().strftime("%Y-%m-%d"), "Exercise": ex['Exercise'],
                         "Set": s+1, "Weight": w, "Reps": r, "RPE": rpe
