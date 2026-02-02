@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import date
 
 # ==========================================
-# 1. CONFIG & CSS
+# 1. CONFIG & CSS (THE FIX IS HERE)
 # ==========================================
 st.set_page_config(page_title="IronOS", page_icon="⚡", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -13,13 +13,19 @@ st.markdown("""
     <style>
         .block-container {padding: 1rem 0.5rem;}
         
-        /* --- FORCE COLUMNS TO STAY IN A ROW ON MOBILE --- */
-        [data-testid="column"] {
-            width: calc(33.3333% - 1rem) !important;
-            flex: 1 1 calc(33.3333% - 1rem) !important;
-            min-width: 0px !important;
+        /* --- MAGIC FIX: FORCE HORIZONTAL LAYOUT ON MOBILE --- */
+        div[data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important; /* Never stack columns */
         }
         
+        /* Allow columns to shrink as small as needed */
+        div[data-testid="column"] {
+            min-width: 0px !important;
+            flex: 1 1 auto !important;
+            padding-left: 2px !important;  /* Reduce gap between columns */
+            padding-right: 2px !important;
+        }
+
         /* Mobile-Friendly Inputs */
         .stNumberInput input {
             height: 45px; 
@@ -28,7 +34,7 @@ st.markdown("""
             font-size: 1rem;
             border: 1px solid #444; 
             border-radius: 8px;
-            padding: 0px;
+            padding: 0px !important; /* Maximizes space for text */
         }
         
         /* Hide Label Gaps */
@@ -48,13 +54,7 @@ st.markdown("""
             margin-bottom: 5px;
         }
         
-        /* Tab Styling */
-        div[data-baseweb="tab-list"] { gap: 10px; }
-        div[data-baseweb="tab"] {
-            height: 50px; width: 100%; justify-content: center; font-weight: bold;
-        }
-        
-        .arrow-box {text-align: center; font-size: 1.5rem; padding-top: 5px;}
+        /* Header Labels */
         .header-label {
             font-size: 0.7rem; 
             font-weight: bold; 
@@ -62,7 +62,17 @@ st.markdown("""
             text-align: center; 
             margin-bottom: 2px;
             text-transform: uppercase;
+            white-space: nowrap; /* Prevent label text wrapping */
         }
+        
+        /* Tab Styling */
+        div[data-baseweb="tab-list"] { gap: 5px; }
+        div[data-baseweb="tab"] {
+            height: 45px; 
+            padding: 0 10px;
+        }
+        
+        .arrow-box {text-align: center; font-size: 1.5rem; padding-top: 5px;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -233,15 +243,13 @@ if st.session_state.workout_queue:
     
     for i, ex in enumerate(st.session_state.workout_queue):
         
-        # CARD HEADER
         with st.expander(f"**{ex['Exercise']}**", expanded=True):
             
-            # ACTIONS
             if st.button("📋 Fill Targets", key=f"cp_{i}", help="Auto-fill"):
                 copy_plan_to_actual(i, ex['Sets'])
                 st.rerun()
-
-            # === 📱 PORTRAIT MODE (TABS) ===
+            
+            # === 📱 PORTRAIT MODE ===
             if "Portrait" in view_mode:
                 tab_target, tab_actual = st.tabs(["🎯 Target", "📝 Actual"])
                 
@@ -252,13 +260,14 @@ if st.session_state.workout_queue:
                         st.info(f"**Set {s+1}:** {t_weight} lbs × {t_reps} reps")
 
                 with tab_actual:
-                    # HEADERS for Portrait
-                    c_head1, c_head2, c_head3 = st.columns(3)
-                    c_head1.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
-                    c_head2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
-                    c_head3.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
+                    # HEADERS (Side-by-side forced by CSS)
+                    c1, c2, c3 = st.columns(3)
+                    c1.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
+                    c2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
+                    c3.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
                     
                     for s in range(ex['Sets']):
+                        # INPUTS (Side-by-side forced by CSS)
                         c1, c2, c3 = st.columns(3)
                         w = c1.number_input(f"w{s}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed")
                         r = c2.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
@@ -269,7 +278,7 @@ if st.session_state.workout_queue:
                             "Set": s+1, "Weight": w, "Reps": r, "RPE": rpe
                         })
 
-            # === 💻 LANDSCAPE MODE (SIDE-BY-SIDE) ===
+            # === 💻 LANDSCAPE MODE ===
             else:
                 c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.8, 0.5, 1.2, 0.8, 0.8])
                 c1.markdown("<div class='header-label'>TARGET</div>", unsafe_allow_html=True)
