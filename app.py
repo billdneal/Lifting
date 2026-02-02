@@ -31,14 +31,9 @@ st.markdown("""
         }
         
         /* Mobile Tab Styling */
-        div[data-baseweb="tab-list"] {
-            gap: 10px;
-        }
+        div[data-baseweb="tab-list"] { gap: 10px; }
         div[data-baseweb="tab"] {
-            height: 50px;
-            width: 100%;
-            justify-content: center;
-            font-weight: bold;
+            height: 50px; width: 100%; justify-content: center; font-weight: bold;
         }
         
         .arrow-box {text-align: center; font-size: 1.5rem; padding-top: 5px;}
@@ -107,9 +102,7 @@ def parse_multi_value(value_str, count, is_number=False):
 # --- SIDEBAR CONTROLS ---
 with st.sidebar:
     st.write("### 📱 Display Settings")
-    # THE MAGIC TOGGLE
     view_mode = st.radio("Orientation", ["Portrait (Mobile)", "Landscape (Wide)"], index=0)
-    
     st.markdown("---")
     if st.button("🔄 Refresh Data"): st.cache_data.clear(); st.rerun()
 
@@ -180,5 +173,123 @@ if not st.session_state.workout_queue:
         if sel_week:
             days = sorted(df_lib[(df_lib['Template'] == sel_temp) & (df_lib['Week'] == sel_week)]['Day'].unique())
             sel_day = st.selectbox("Day", days, index=None)
+            
             if sel_day and st.button("🚀 Load", type="primary", use_container_width=True):
-                rows = df_lib[(df_lib['Template'] == sel_temp) & (df_lib['Week']
+                # FIXED: Broken filtering logic is now safer
+                mask = (
+                    (df_lib['Template'] == sel_temp) & 
+                    (df_lib['Week'] == sel_week) & 
+                    (df_lib['Day'] == sel_day)
+                )
+                rows = df_lib[mask]
+                
+                st.session_state.workout_queue = []
+                for _, row in rows.iterrows():
+                    base_max = get_profile_max(df_profile, row['Exercise'])
+                    try: n_sets = int(float(row['Sets']))
+                    except: n_sets = 3
+                    
+                    pct_str = str(row['Pct']) if pd.notna(row['Pct']) else "0"
+                    pct_list = parse_multi_value(pct_str, n_sets, is_number=True)
+                    
+                    rep_str = str(row['Reps']) if pd.notna(row['Reps']) else "5"
+                    rep_list = parse_multi_value(rep_str, n_sets, is_number=False)
+                    
+                    guide_list = []
+                    for p in pct_list:
+                        gw = int((base_max * p) / 5) * 5 if p > 0 else 0
+                        guide_list.append(gw)
+                        
+                    st.session_state.workout_queue.append({
+                        "Category": str(row.get('Category', 'Accessory')),
+                        "Exercise": row['Exercise'], "Sets": n_sets,
+                        "Rep_List": rep_list, "Guide_List": guide_list,
+                        "Meta": {"Template": sel_temp}
+                    })
+                st.rerun()
+
+# --- ACTIVE SESSION ---
+if st.session_state.workout_queue:
+    logs_to_save = []
+    
+    for i, ex in enumerate(st.session_state.workout_queue):
+        
+        # CARD HEADER
+        with st.expander(f"**{ex['Exercise']}**", expanded=True):
+            
+            # COPY BUTTON
+            if st.button("📋 Fill Targets", key=f"cp_{i}", help="Auto-fill"):
+                copy_plan_to_actual(i, ex['Sets'])
+                st.rerun()
+            
+            # === 📱 PORTRAIT MODE (TABS) ===
+            if "Portrait" in view_mode:
+                tab_target, tab_actual = st.tabs(["🎯 Target", "📝 Actual"])
+                
+                with tab_target:
+                    for s in range(ex['Sets']):
+                        t_weight = ex['Guide_List'][s] if s < len(ex['Guide_List']) else ex['Guide_List'][-1]
+                        t_reps = ex['Rep_List'][s] if s < len(ex['Rep_List']) else ex['Rep_List'][-1]
+                        st.info(f"**Set {s+1}:** {t_weight} lbs × {t_reps} reps")
+
+                with tab_actual:
+                    col_lbs, col_reps, col_rpe = st.columns(3)
+                    col_lbs.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
+                    col_reps.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
+                    col_rpe.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
+                    
+                    for s in range(ex['Sets']):
+                        c1, c2, c3 = st.columns(3)
+                        w = c1.number_input(f"w{s}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed")
+                        r = c2.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
+                        rpe = c3.number_input(f"rpe{s}", value=0.0, step=0.5, key=f"rpe_{i}_{s}", label_visibility="collapsed")
+                        
+                        logs_to_save.append({
+                            "Date": date.today().strftime("%Y-%m-%d"), "Exercise": ex['Exercise'],
+                            "Set": s+1, "Weight": w, "Reps": r, "RPE": rpe
+                        })
+
+            # === 💻 LANDSCAPE MODE (SIDE-BY-SIDE) ===
+            else:
+                c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.8, 0.5, 1.2, 0.8, 0.8])
+                c1.markdown("<div class='header-label'>TARGET</div>", unsafe_allow_html=True)
+                c2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
+                c4.markdown("<div class='header-label'>ACTUAL</div>", unsafe_allow_html=True)
+                c5.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
+                c6.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
+
+                for s in range(ex['Sets']):
+                    t_weight = ex['Guide_List'][s] if s < len(ex['Guide_List']) else ex['Guide_List'][-1]
+                    t_reps = ex['Rep_List'][s] if s < len(ex['Rep_List']) else ex['Rep_List'][-1]
+                    
+                    c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.8, 0.5, 1.2, 0.8, 0.8])
+                    c1.markdown(f"<div class='target-box'>{t_weight}</div>", unsafe_allow_html=True)
+                    c2.markdown(f"<div class='target-box'>{t_reps}</div>", unsafe_allow_html=True)
+                    c3.markdown("<div class='arrow-box'>🟩</div>", unsafe_allow_html=True)
+                    
+                    w = c4.number_input(f"w{s}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed")
+                    r = c5.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
+                    rpe = c6.number_input(f"rpe{s}", value=0.0, step=0.5, key=f"rpe_{i}_{s}", label_visibility="collapsed")
+                    
+                    # Log appending happens here too, duplicates removed at save
+                    logs_to_save.append({
+                        "Date": date.today().strftime("%Y-%m-%d"), "Exercise": ex['Exercise'],
+                        "Set": s+1, "Weight": w, "Reps": r, "RPE": rpe
+                    })
+
+    st.markdown("---")
+    if st.button("✅ Finish & Save", type="primary", use_container_width=True):
+        new_logs = pd.DataFrame(logs_to_save)
+        new_logs = new_logs.drop_duplicates()
+        new_logs = new_logs[new_logs['Weight'] > 0]
+        
+        if not new_logs.empty:
+            try:
+                current = conn.read(worksheet="Logs", ttl=0, dtype=str)
+                updated = pd.concat([current, new_logs], ignore_index=True)
+                conn.update(worksheet="Logs", data=updated)
+                st.toast("Saved!", icon="🏆")
+                st.session_state.workout_queue = []
+                st.rerun()
+            except Exception as e: st.error(f"Error: {e}")
+        else: st.warning("Log at least one set.")
