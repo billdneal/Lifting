@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import date
 
 # ==========================================
-# 1. CONFIG & CSS (THE FIX IS HERE)
+# 1. CONFIG & CSS (STRICT MOBILE LAYOUT)
 # ==========================================
 st.set_page_config(page_title="IronOS", page_icon="⚡", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -13,19 +13,21 @@ st.markdown("""
     <style>
         .block-container {padding: 1rem 0.5rem;}
         
-        /* --- MAGIC FIX: FORCE HORIZONTAL LAYOUT ON MOBILE --- */
-        div[data-testid="stHorizontalBlock"] {
-            flex-wrap: nowrap !important; /* Never stack columns */
+        /* --- FORCE HORIZONTAL LAYOUT ON MOBILE --- */
+        /* This targets the container holding the columns */
+        [data-testid="stHorizontalBlock"] {
+            flex-direction: row !important; /* Force row direction */
+            flex-wrap: nowrap !important;   /* Prevent wrapping */
+            gap: 5px !important;            /* Reduce gap to fit */
         }
         
-        /* Allow columns to shrink as small as needed */
-        div[data-testid="column"] {
-            min-width: 0px !important;
-            flex: 1 1 auto !important;
-            padding-left: 2px !important;  /* Reduce gap between columns */
-            padding-right: 2px !important;
+        /* This targets the individual columns */
+        [data-testid="column"] {
+            width: 33% !important;          /* Force strict 1/3 width */
+            flex: 1 1 33% !important;       /* Flex grow/shrink/basis */
+            min-width: 50px !important;     /* Allow them to get very small */
         }
-
+        
         /* Mobile-Friendly Inputs */
         .stNumberInput input {
             height: 45px; 
@@ -34,7 +36,7 @@ st.markdown("""
             font-size: 1rem;
             border: 1px solid #444; 
             border-radius: 8px;
-            padding: 0px !important; /* Maximizes space for text */
+            padding: 0px !important;
         }
         
         /* Hide Label Gaps */
@@ -54,17 +56,6 @@ st.markdown("""
             margin-bottom: 5px;
         }
         
-        /* Header Labels */
-        .header-label {
-            font-size: 0.7rem; 
-            font-weight: bold; 
-            color: #aaa; 
-            text-align: center; 
-            margin-bottom: 2px;
-            text-transform: uppercase;
-            white-space: nowrap; /* Prevent label text wrapping */
-        }
-        
         /* Tab Styling */
         div[data-baseweb="tab-list"] { gap: 5px; }
         div[data-baseweb="tab"] {
@@ -73,6 +64,14 @@ st.markdown("""
         }
         
         .arrow-box {text-align: center; font-size: 1.5rem; padding-top: 5px;}
+        .header-label {
+            font-size: 0.7rem; 
+            font-weight: bold; 
+            color: #aaa; 
+            text-align: center; 
+            margin-bottom: 2px;
+            text-transform: uppercase;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -261,10 +260,10 @@ if st.session_state.workout_queue:
 
                 with tab_actual:
                     # HEADERS (Side-by-side forced by CSS)
-                    c1, c2, c3 = st.columns(3)
-                    c1.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
-                    c2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
-                    c3.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
+                    c_head1, c_head2, c_head3 = st.columns(3)
+                    c_head1.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
+                    c_head2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
+                    c_head3.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
                     
                     for s in range(ex['Sets']):
                         # INPUTS (Side-by-side forced by CSS)
