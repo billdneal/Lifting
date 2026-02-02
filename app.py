@@ -11,58 +11,55 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 st.markdown("""
     <style>
-        .block-container {padding: 1rem 0.5rem;}
+        /* 1. HIDE +/- BUTTONS AND WARNINGS */
+        div[data-testid="stNumberInput"] button { display: none !important; }
+        .stNumberInput input { width: 100% !important; }
         
-        /* 1. HIDE THE +/- BUTTONS IN NUMBER INPUTS */
-        div[data-testid="stNumberInput"] button {
-            display: none !important;
-        }
+        /* 2. COMPACT CONTAINER */
+        .main .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; }
         
-        /* 2. MOBILE-FRIENDLY COLUMNS */
-        [data-testid="column"] {
-            width: 100% !important;
-            min-width: 0 !important;
+        /* 3. CUSTOM NUMBER INPUT STYLE */
+        .compact-input {
+            height: 45px !important;
+            min-height: 45px !important;
+            text-align: center !important;
+            font-weight: bold !important;
+            font-size: 1rem !important;
+            border: 1px solid #555 !important;
+            border-radius: 6px !important;
+            background-color: #0e1117 !important;
             padding: 0 2px !important;
         }
         
-        /* 3. COMPACT INPUT STYLES */
-        .stNumberInput input {
-            height: 45px !important;
+        .compact-input:focus {
+            border-color: #ff4b4b !important;
+            box-shadow: 0 0 0 1px #ff4b4b !important;
+        }
+        
+        /* 4. TARGET BOX STYLES */
+        .target-box {
+            background: linear-gradient(135deg, #2d3436, #636e72);
+            border: 1px solid #444;
+            border-radius: 6px;
             text-align: center;
+            padding: 10px 5px;
+            color: white;
             font-weight: bold;
             font-size: 1.1rem;
-            border: 2px solid #444;
-            border-radius: 8px;
-            padding: 4px !important;
-            background-color: #0e1117;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
         }
         
-        .stNumberInput input:focus {
-            border-color: #ff4b4b;
-            box-shadow: 0 0 0 1px #ff4b4b;
+        .target-reps {
+            background: linear-gradient(135deg, #1a5276, #3498db);
         }
         
-        /* 4. HIDE LABELS */
-        .stNumberInput label,
-        .stSelectbox label,
-        .stTextInput label {
-            display: none;
-        }
-        
-        /* 5. TABLET & DESKTOP VIEWS */
-        @media (min-width: 768px) {
-            [data-testid="column"] {
-                width: 33% !important;
-            }
-            .stNumberInput input {
-                height: 50px;
-                font-size: 1.2rem;
-            }
-        }
-        
-        /* 6. COMPACT HEADER STYLES */
+        /* 5. COMPACT HEADERS */
         .compact-header {
-            font-size: 0.75rem !important;
+            font-size: 0.7rem !important;
             font-weight: bold !important;
             color: #aaa !important;
             text-align: center !important;
@@ -71,59 +68,47 @@ st.markdown("""
             letter-spacing: 0.5px !important;
         }
         
-        /* 7. SET NUMBER INDICATOR */
+        /* 6. SET NUMBER */
         .set-number {
-            position: absolute;
-            top: -8px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #444;
-            color: white;
-            font-size: 0.7rem;
-            padding: 1px 6px;
-            border-radius: 10px;
-            z-index: 100;
-        }
-        
-        /* 8. COMPACT CARD STYLES */
-        .compact-card {
-            background: rgba(30, 30, 40, 0.7);
-            border-radius: 10px;
-            padding: 10px;
-            margin: 5px 0;
-            border: 1px solid #333;
-        }
-        
-        /* 9. TARGET BOX - COMPACT */
-        .target-box-compact {
-            background: linear-gradient(135deg, #2d3436, #636e72);
-            border: 2px solid #444;
-            border-radius: 8px;
-            text-align: center;
-            padding: 8px 2px;
-            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-weight: bold;
-            font-size: 1.1rem;
-            margin: 2px;
-            min-width: 70px;
+            font-size: 0.9rem;
+            color: #aaa;
+            height: 45px;
         }
         
-        /* 10. IMPROVE EXPANDER */
+        /* 7. REMOVE ALL LABELS */
+        div[data-testid="stNumberInput"] > label,
+        div[data-testid="stSelectbox"] > label,
+        div[data-testid="stTextInput"] > label {
+            display: none !important;
+        }
+        
+        /* 8. BUTTON STYLES */
+        div[data-testid="stButton"] button {
+            height: 45px !important;
+            min-height: 45px !important;
+            padding: 0 8px !important;
+        }
+        
+        /* 9. EXPANDER STYLES */
         .stExpander {
+            border: 1px solid #333 !important;
+            border-radius: 8px !important;
             margin: 5px 0 !important;
         }
         
-        .stExpander details {
-            border: 1px solid #444 !important;
-            border-radius: 8px !important;
-            padding: 8px !important;
+        .stExpander summary {
+            padding: 0.5rem 1rem !important;
         }
         
-        /* 11. BUTTON STYLES */
-        div[data-testid="stButton"] > button {
-            height: 45px !important;
-            padding: 0 10px !important;
-            font-size: 0.9rem !important;
+        /* 10. FORCE NO GAPS BETWEEN COLUMNS */
+        [data-testid="column"] {
+            padding: 0 2px !important;
+            min-width: 0 !important;
+            gap: 0 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -186,19 +171,11 @@ def parse_multi_value(value_str, count, is_number=False):
         else: result.append(raw)
     return result
 
-# --- SIDEBAR CONTROLS ---
-with st.sidebar:
-    st.write("### 📱 Display Settings")
-    view_mode = st.radio("Orientation", ["Portrait (Mobile)", "Landscape (Wide)"], index=0)
-    st.markdown("---")
-    if st.button("🔄 Refresh Data"): st.cache_data.clear(); st.rerun()
-
-df_lib, df_profile, df_dir, RPE_DATA = load_static_data()
-
 # ==========================================
-# 3. SESSION LOGIC (UNCHANGED)
+# 3. SESSION LOGIC
 # ==========================================
-if 'workout_queue' not in st.session_state: st.session_state.workout_queue = []
+if 'workout_queue' not in st.session_state: 
+    st.session_state.workout_queue = []
 
 def copy_plan_to_actual(index, sets):
     ex = st.session_state.workout_queue[index]
@@ -208,12 +185,13 @@ def copy_plan_to_actual(index, sets):
         st.session_state[f"w_{index}_{s}"] = float(guides[s])
         try: st.session_state[f"r_{index}_{s}"] = int(str(reps[s]).replace("+", "").strip())
         except: st.session_state[f"r_{index}_{s}"] = 5
+        st.session_state[f"rpe_{index}_{s}"] = 0.0
 
 # ==========================================
-# 4. APP INTERFACE (OPTIMIZED MOBILE VIEW)
+# 4. APP INTERFACE
 # ==========================================
 c_h1, c_h2 = st.columns([3, 1])
-c_h1.markdown(f"### 📅 {date.today().strftime('%A, %b %d')}")
+c_h1.markdown(f"### {date.today().strftime('%A, %b %d')}")
 if c_h2.button("Reset", use_container_width=True):
     st.session_state.workout_queue = []
     st.rerun()
@@ -289,33 +267,31 @@ if not st.session_state.workout_queue:
                     })
                 st.rerun()
 
-# --- ACTIVE SESSION (OPTIMIZED VIEWS) ---
+# --- ACTIVE SESSION ---
 if st.session_state.workout_queue:
     logs_to_save = []
     
     for i, ex in enumerate(st.session_state.workout_queue):
         
         with st.expander(f"**{ex['Exercise']}** • {ex['Sets']} sets", expanded=True):
-            
-            # Compact header with auto-fill button
+            # Header with category and fill button
             col1, col2 = st.columns([3, 1])
             col1.markdown(f"*{ex['Category']}*")
             if col2.button("📋 Fill", key=f"cp_{i}", use_container_width=True, help="Auto-fill targets"):
                 copy_plan_to_actual(i, ex['Sets'])
                 st.rerun()
             
-            # === 📱 PORTRAIT MODE - COMPACT ===
+            # === 📱 PORTRAIT MODE - MATCHING YOUR SCREENSHOTS ===
             if "Portrait" in view_mode:
-                st.markdown("---")
-                
-                # Header row - Much more compact
+                # Single row header (like your screenshot)
                 st.markdown("""
-                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                    <div style="width: 30%; text-align: center;"><span class='compact-header'>Target</span></div>
-                    <div style="width: 15%; text-align: center;"><span class='compact-header'>Reps</span></div>
-                    <div style="width: 30%; text-align: center;"><span class='compact-header'>Actual</span></div>
-                    <div style="width: 15%; text-align: center;"><span class='compact-header'>Reps</span></div>
-                    <div style="width: 10%; text-align: center;"><span class='compact-header'>RPE</span></div>
+                <div style="display: flex; width: 100%; margin-bottom: 5px;">
+                    <div style="width: 12%; text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;">SET</div>
+                    <div style="width: 22%; text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;">TARGET</div>
+                    <div style="width: 22%; text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;">REPS</div>
+                    <div style="width: 22%; text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;">ACTUAL</div>
+                    <div style="width: 11%; text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;">REPS</div>
+                    <div style="width: 11%; text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;">RPE</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -324,19 +300,19 @@ if st.session_state.workout_queue:
                     t_weight = ex['Guide_List'][s] if s < len(ex['Guide_List']) else ex['Guide_List'][-1]
                     t_reps = ex['Rep_List'][s] if s < len(ex['Rep_List']) else ex['Rep_List'][-1]
                     
-                    # Create a single row with all inputs
-                    cols = st.columns([0.3, 0.7, 0.7, 0.7, 0.7, 0.7])
+                    # Create columns WITHOUT gaps
+                    cols = st.columns([0.12, 0.22, 0.22, 0.22, 0.11, 0.11], gap="small")
                     
-                    # Set number indicator
-                    cols[0].markdown(f"<div style='text-align: center; font-size: 0.8rem; color: #aaa;'>**{s+1}**</div>", unsafe_allow_html=True)
+                    # Set number
+                    cols[0].markdown(f"<div class='set-number'>{s+1}</div>", unsafe_allow_html=True)
                     
-                    # Target weight (read-only display)
-                    cols[1].markdown(f"<div class='target-box-compact'>{int(t_weight)}</div>", unsafe_allow_html=True)
+                    # Target weight
+                    cols[1].markdown(f"<div class='target-box'>{int(t_weight)}</div>", unsafe_allow_html=True)
                     
-                    # Target reps (read-only display)
-                    cols[2].markdown(f"<div class='target-box-compact' style='background: #1a5276;'>{t_reps}</div>", unsafe_allow_html=True)
+                    # Target reps
+                    cols[2].markdown(f"<div class='target-box target-reps'>{t_reps}</div>", unsafe_allow_html=True)
                     
-                    # Actual weight input
+                    # Actual weight - use st.number_input but with custom styling
                     with cols[3]:
                         w_key = f"w_{i}_{s}"
                         if w_key not in st.session_state:
@@ -347,10 +323,12 @@ if st.session_state.workout_queue:
                             step=5.0,
                             key=w_key,
                             label_visibility="collapsed",
-                            format="%d"
+                            min_value=0.0,
+                            max_value=1000.0,
+                            format="%d"  # Format as integer to avoid float warning
                         )
                     
-                    # Actual reps input
+                    # Actual reps
                     with cols[4]:
                         r_key = f"r_{i}_{s}"
                         if r_key not in st.session_state:
@@ -360,10 +338,13 @@ if st.session_state.workout_queue:
                             value=st.session_state[r_key],
                             step=1,
                             key=r_key,
-                            label_visibility="collapsed"
+                            label_visibility="collapsed",
+                            min_value=0,
+                            max_value=100,
+                            format="%d"
                         )
                     
-                    # RPE input
+                    # RPE
                     with cols[5]:
                         rpe_key = f"rpe_{i}_{s}"
                         if rpe_key not in st.session_state:
@@ -374,6 +355,8 @@ if st.session_state.workout_queue:
                             step=0.5,
                             key=rpe_key,
                             label_visibility="collapsed",
+                            min_value=0.0,
+                            max_value=10.0,
                             format="%.1f"
                         )
                     
@@ -389,34 +372,91 @@ if st.session_state.workout_queue:
                     # Add subtle separator between sets
                     if s < ex['Sets'] - 1:
                         st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
-
-            # === 💻 LANDSCAPE MODE ===
+            
+            # === 💻 LANDSCAPE MODE - MATCHING YOUR SECOND SCREENSHOT ===
             else:
-                # Keep your existing landscape layout
-                c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.8, 0.5, 1.2, 0.8, 0.8])
-                c1.markdown("<div class='header-label'>TARGET</div>", unsafe_allow_html=True)
-                c2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
-                c4.markdown("<div class='header-label'>ACTUAL</div>", unsafe_allow_html=True)
-                c5.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
-                c6.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
-
-                for s in range(ex['Sets']):
-                    t_weight = ex['Guide_List'][s] if s < len(ex['Guide_List']) else ex['Guide_List'][-1]
-                    t_reps = ex['Rep_List'][s] if s < len(ex['Rep_List']) else ex['Rep_List'][-1]
+                # Two-column layout like your screenshot
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("<div class='compact-header'>TARGET</div>", unsafe_allow_html=True)
+                    for s in range(ex['Sets']):
+                        t_weight = ex['Guide_List'][s] if s < len(ex['Guide_List']) else ex['Guide_List'][-1]
+                        t_reps = ex['Rep_List'][s] if s < len(ex['Rep_List']) else ex['Rep_List'][-1]
+                        
+                        # Single row for target
+                        t_cols = st.columns([2, 1])
+                        t_cols[0].markdown(f"<div class='target-box'>{int(t_weight)}</div>", unsafe_allow_html=True)
+                        t_cols[1].markdown(f"<div class='target-box target-reps'>{t_reps}</div>", unsafe_allow_html=True)
+                        
+                        if s < ex['Sets'] - 1:
+                            st.markdown("<div style='height: 3px;'></div>", unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown("<div class='compact-header'>ACTUAL</div>", unsafe_allow_html=True)
                     
-                    c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.8, 0.5, 1.2, 0.8, 0.8])
-                    c1.markdown(f"<div class='target-box'>{t_weight}</div>", unsafe_allow_html=True)
-                    c2.markdown(f"<div class='target-box'>{t_reps}</div>", unsafe_allow_html=True)
-                    c3.markdown("<div class='arrow-box'>🟩</div>", unsafe_allow_html=True)
+                    # Header row for actual
+                    a_head = st.columns([2, 1, 1])
+                    a_head[0].markdown("<div style='text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;'>Weight</div>", unsafe_allow_html=True)
+                    a_head[1].markdown("<div style='text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;'>Reps</div>", unsafe_allow_html=True)
+                    a_head[2].markdown("<div style='text-align: center; font-size: 0.7rem; color: #aaa; font-weight: bold;'>RPE</div>", unsafe_allow_html=True)
                     
-                    w = c4.number_input(f"w{s}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed")
-                    r = c5.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
-                    rpe = c6.number_input(f"rpe{s}", value=0.0, step=0.5, key=f"rpe_{i}_{s}", label_visibility="collapsed")
-                    
-                    logs_to_save.append({
-                        "Date": date.today().strftime("%Y-%m-%d"), "Exercise": ex['Exercise'],
-                        "Set": s+1, "Weight": w, "Reps": r, "RPE": rpe
-                    })
+                    for s in range(ex['Sets']):
+                        a_cols = st.columns([2, 1, 1])
+                        
+                        # Actual weight
+                        with a_cols[0]:
+                            w_key = f"w_{i}_{s}"
+                            if w_key not in st.session_state:
+                                st.session_state[w_key] = 0.0
+                            w = st.number_input(
+                                f"w_{i}_{s}_land",
+                                value=st.session_state[w_key],
+                                step=5.0,
+                                key=w_key,
+                                label_visibility="collapsed",
+                                format="%d"
+                            )
+                        
+                        # Actual reps
+                        with a_cols[1]:
+                            r_key = f"r_{i}_{s}"
+                            if r_key not in st.session_state:
+                                st.session_state[r_key] = 0
+                            r = st.number_input(
+                                f"r_{i}_{s}_land",
+                                value=st.session_state[r_key],
+                                step=1,
+                                key=r_key,
+                                label_visibility="collapsed",
+                                format="%d"
+                            )
+                        
+                        # RPE
+                        with a_cols[2]:
+                            rpe_key = f"rpe_{i}_{s}"
+                            if rpe_key not in st.session_state:
+                                st.session_state[rpe_key] = 0.0
+                            rpe = st.number_input(
+                                f"rpe_{i}_{s}_land",
+                                value=st.session_state[rpe_key],
+                                step=0.5,
+                                key=rpe_key,
+                                label_visibility="collapsed",
+                                format="%.1f"
+                            )
+                        
+                        logs_to_save.append({
+                            "Date": date.today().strftime("%Y-%m-%d"), 
+                            "Exercise": ex['Exercise'],
+                            "Set": s+1, 
+                            "Weight": w, 
+                            "Reps": r, 
+                            "RPE": rpe
+                        })
+                        
+                        if s < ex['Sets'] - 1:
+                            st.markdown("<div style='height: 3px;'></div>", unsafe_allow_html=True)
 
     st.markdown("---")
     if st.button("✅ Finish & Save", type="primary", use_container_width=True):
