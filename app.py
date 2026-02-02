@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import date
 
 # ==========================================
-# 1. CONFIG & CSS (STRICT MOBILE LAYOUT)
+# 1. CONFIG & CSS (STRICT MOBILE FIT)
 # ==========================================
 st.set_page_config(page_title="IronOS", page_icon="⚡", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -13,30 +13,28 @@ st.markdown("""
     <style>
         .block-container {padding: 1rem 0.5rem;}
         
-        /* --- FORCE HORIZONTAL LAYOUT ON MOBILE --- */
-        /* This targets the container holding the columns */
-        [data-testid="stHorizontalBlock"] {
-            flex-direction: row !important; /* Force row direction */
-            flex-wrap: nowrap !important;   /* Prevent wrapping */
-            gap: 5px !important;            /* Reduce gap to fit */
-        }
-        
-        /* This targets the individual columns */
+        /* --- CRITICAL FIX: FORCE COLUMNS TO SHRINK --- */
         [data-testid="column"] {
-            width: 33% !important;          /* Force strict 1/3 width */
-            flex: 1 1 33% !important;       /* Flex grow/shrink/basis */
-            min-width: 50px !important;     /* Allow them to get very small */
+            width: 33% !important;
+            flex: 1 1 33% !important;
+            min-width: 10px !important; /* Allow shrinking to almost nothing */
         }
         
-        /* Mobile-Friendly Inputs */
+        /* Prevent the container from forcing a scrollbar */
+        [data-testid="stHorizontalBlock"] {
+            width: 100% !important;
+            min-width: 0px !important;
+        }
+
+        /* Mobile-Friendly Inputs - Tighter Padding */
         .stNumberInput input {
-            height: 45px; 
+            height: 40px; 
             text-align: center; 
             font-weight: bold; 
-            font-size: 1rem;
+            font-size: 0.9rem; /* Slightly smaller font to fit */
             border: 1px solid #444; 
-            border-radius: 8px;
-            padding: 0px !important;
+            border-radius: 6px;
+            padding: 0px 2px !important; /* Tight padding */
         }
         
         /* Hide Label Gaps */
@@ -49,21 +47,14 @@ st.markdown("""
             border: 1px solid #444; 
             border-radius: 8px;
             text-align: center; 
-            padding: 12px 0; 
+            padding: 10px 0; 
             color: #fff; 
             font-weight: bold; 
-            font-size: 1rem;
+            font-size: 0.9rem;
             margin-bottom: 5px;
         }
         
-        /* Tab Styling */
-        div[data-baseweb="tab-list"] { gap: 5px; }
-        div[data-baseweb="tab"] {
-            height: 45px; 
-            padding: 0 10px;
-        }
-        
-        .arrow-box {text-align: center; font-size: 1.5rem; padding-top: 5px;}
+        /* Header Labels */
         .header-label {
             font-size: 0.7rem; 
             font-weight: bold; 
@@ -76,7 +67,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. DATA LOADING & PARSING
+# 2. DATA LOADING
 # ==========================================
 @st.cache_data(ttl=600)
 def load_static_data():
@@ -259,15 +250,15 @@ if st.session_state.workout_queue:
                         st.info(f"**Set {s+1}:** {t_weight} lbs × {t_reps} reps")
 
                 with tab_actual:
-                    # HEADERS (Side-by-side forced by CSS)
-                    c_head1, c_head2, c_head3 = st.columns(3)
+                    # HEADERS (Force tight gap)
+                    c_head1, c_head2, c_head3 = st.columns([1,1,1], gap="small")
                     c_head1.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
                     c_head2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
                     c_head3.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
                     
                     for s in range(ex['Sets']):
-                        # INPUTS (Side-by-side forced by CSS)
-                        c1, c2, c3 = st.columns(3)
+                        # INPUTS (Force tight gap)
+                        c1, c2, c3 = st.columns([1,1,1], gap="small")
                         w = c1.number_input(f"w{s}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed")
                         r = c2.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
                         rpe = c3.number_input(f"rpe{s}", value=0.0, step=0.5, key=f"rpe_{i}_{s}", label_visibility="collapsed")
