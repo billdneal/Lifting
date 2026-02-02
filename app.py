@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import date
 
 # ==========================================
-# 1. CONFIG & CSS (STRICT MOBILE FIT)
+# 1. CONFIG & CSS (THE "BUTTON KILLER" FIX)
 # ==========================================
 st.set_page_config(page_title="IronOS", page_icon="⚡", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -13,28 +13,29 @@ st.markdown("""
     <style>
         .block-container {padding: 1rem 0.5rem;}
         
-        /* --- CRITICAL FIX: FORCE COLUMNS TO SHRINK --- */
+        /* 1. HIDE THE +/- BUTTONS IN NUMBER INPUTS */
+        /* This saves huge amounts of space on mobile */
+        div[data-testid="stNumberInput"] button {
+            display: none !important;
+        }
+        
+        /* 2. FORCE COLUMNS TO FIT SIDE-BY-SIDE */
         [data-testid="column"] {
             width: 33% !important;
             flex: 1 1 33% !important;
-            min-width: 10px !important; /* Allow shrinking to almost nothing */
+            min-width: 10px !important;
+            padding: 0 2px !important; /* Tiny gap between columns */
         }
         
-        /* Prevent the container from forcing a scrollbar */
-        [data-testid="stHorizontalBlock"] {
-            width: 100% !important;
-            min-width: 0px !important;
-        }
-
-        /* Mobile-Friendly Inputs - Tighter Padding */
+        /* 3. STYLE THE INPUT BOX (NOW JUST A CLEAN BOX) */
         .stNumberInput input {
             height: 40px; 
             text-align: center; 
             font-weight: bold; 
-            font-size: 0.9rem; /* Slightly smaller font to fit */
+            font-size: 1rem;
             border: 1px solid #444; 
-            border-radius: 6px;
-            padding: 0px 2px !important; /* Tight padding */
+            border-radius: 8px;
+            padding: 0px !important;
         }
         
         /* Hide Label Gaps */
@@ -50,7 +51,7 @@ st.markdown("""
             padding: 10px 0; 
             color: #fff; 
             font-weight: bold; 
-            font-size: 0.9rem;
+            font-size: 1rem;
             margin-bottom: 5px;
         }
         
@@ -62,6 +63,13 @@ st.markdown("""
             text-align: center; 
             margin-bottom: 2px;
             text-transform: uppercase;
+        }
+        
+        /* Tab Styling */
+        div[data-baseweb="tab-list"] { gap: 5px; }
+        div[data-baseweb="tab"] {
+            height: 45px; 
+            padding: 0 10px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -250,14 +258,14 @@ if st.session_state.workout_queue:
                         st.info(f"**Set {s+1}:** {t_weight} lbs × {t_reps} reps")
 
                 with tab_actual:
-                    # HEADERS (Force tight gap)
+                    # HEADERS (No Gap)
                     c_head1, c_head2, c_head3 = st.columns([1,1,1], gap="small")
                     c_head1.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
                     c_head2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
                     c_head3.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
                     
                     for s in range(ex['Sets']):
-                        # INPUTS (Force tight gap)
+                        # INPUTS (No Gap)
                         c1, c2, c3 = st.columns([1,1,1], gap="small")
                         w = c1.number_input(f"w{s}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed")
                         r = c2.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
