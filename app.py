@@ -13,10 +13,15 @@ st.markdown("""
     <style>
         .block-container {padding: 1rem 0.5rem;}
         
-        /* Big Inputs for Mobile */
+        /* Mobile-Friendly Inputs */
         .stNumberInput input {
-            height: 45px; text-align: center; font-weight: bold; font-size: 1.1rem;
-            border: 1px solid #ccc; border-radius: 8px;
+            height: 45px; 
+            text-align: center; 
+            font-weight: bold; 
+            font-size: 1rem;
+            border: 1px solid #444; /* Darker border for dark mode contrast */
+            border-radius: 8px;
+            padding: 0px;
         }
         
         /* Hide Label Gaps */
@@ -25,19 +30,32 @@ st.markdown("""
         
         /* Target Box Style */
         .target-box {
-            background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;
-            text-align: center; padding: 12px 0; color: #495057; font-weight: bold; font-size: 1rem;
+            background-color: #262730; /* Dark mode friendly bg */
+            border: 1px solid #444; 
+            border-radius: 8px;
+            text-align: center; 
+            padding: 12px 0; 
+            color: #fff; 
+            font-weight: bold; 
+            font-size: 1rem;
             margin-bottom: 5px;
         }
         
-        /* Mobile Tab Styling */
+        /* Tab Styling */
         div[data-baseweb="tab-list"] { gap: 10px; }
         div[data-baseweb="tab"] {
             height: 50px; width: 100%; justify-content: center; font-weight: bold;
         }
         
         .arrow-box {text-align: center; font-size: 1.5rem; padding-top: 5px;}
-        .header-label {font-size: 0.8rem; font-weight: bold; color: #666; text-align: center;}
+        .header-label {
+            font-size: 0.8rem; 
+            font-weight: bold; 
+            color: #aaa; 
+            text-align: center; 
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -186,7 +204,6 @@ if not st.session_state.workout_queue:
                     base_max = get_profile_max(df_profile, row['Exercise'])
                     try: n_sets = int(float(row['Sets']))
                     except: n_sets = 3
-                    
                     pct_str = str(row['Pct']) if pd.notna(row['Pct']) else "0"
                     pct_list = parse_multi_value(pct_str, n_sets, is_number=True)
                     rep_str = str(row['Reps']) if pd.notna(row['Reps']) else "5"
@@ -209,10 +226,8 @@ if st.session_state.workout_queue:
     
     for i, ex in enumerate(st.session_state.workout_queue):
         
-        # CARD HEADER
         with st.expander(f"**{ex['Exercise']}**", expanded=True):
             
-            # COPY BUTTON
             if st.button("📋 Fill Targets", key=f"cp_{i}", help="Auto-fill"):
                 copy_plan_to_actual(i, ex['Sets'])
                 st.rerun()
@@ -228,15 +243,14 @@ if st.session_state.workout_queue:
                         st.info(f"**Set {s+1}:** {t_weight} lbs × {t_reps} reps")
 
                 with tab_actual:
-                    # UPDATED: Use ratios [1.5, 1.5, 1.5, 4] to squish inputs to the LEFT
-                    col_lbs, col_reps, col_rpe, _ = st.columns([1.5, 1.5, 1.5, 4])
-                    col_lbs.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
-                    col_reps.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
-                    col_rpe.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
+                    # FIX: Use simple equal columns to force horizontal layout
+                    c_head1, c_head2, c_head3 = st.columns(3)
+                    c_head1.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
+                    c_head2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
+                    c_head3.markdown("<div class='header-label'>RPE</div>", unsafe_allow_html=True)
                     
                     for s in range(ex['Sets']):
-                        # Same squished layout for rows
-                        c1, c2, c3, _ = st.columns([1.5, 1.5, 1.5, 4])
+                        c1, c2, c3 = st.columns(3)
                         w = c1.number_input(f"w{s}", value=0.0, step=5.0, key=f"w_{i}_{s}", label_visibility="collapsed")
                         r = c2.number_input(f"r{s}", value=0, step=1, key=f"r_{i}_{s}", label_visibility="collapsed")
                         rpe = c3.number_input(f"rpe{s}", value=0.0, step=0.5, key=f"rpe_{i}_{s}", label_visibility="collapsed")
