@@ -13,13 +13,20 @@ st.markdown("""
     <style>
         .block-container {padding: 1rem 0.5rem;}
         
+        /* --- FORCE COLUMNS TO STAY IN A ROW ON MOBILE --- */
+        [data-testid="column"] {
+            width: calc(33.3333% - 1rem) !important;
+            flex: 1 1 calc(33.3333% - 1rem) !important;
+            min-width: 0px !important;
+        }
+        
         /* Mobile-Friendly Inputs */
         .stNumberInput input {
             height: 45px; 
             text-align: center; 
             font-weight: bold; 
             font-size: 1rem;
-            border: 1px solid #444; /* Darker border for dark mode contrast */
+            border: 1px solid #444; 
             border-radius: 8px;
             padding: 0px;
         }
@@ -30,7 +37,7 @@ st.markdown("""
         
         /* Target Box Style */
         .target-box {
-            background-color: #262730; /* Dark mode friendly bg */
+            background-color: #262730; 
             border: 1px solid #444; 
             border-radius: 8px;
             text-align: center; 
@@ -49,11 +56,11 @@ st.markdown("""
         
         .arrow-box {text-align: center; font-size: 1.5rem; padding-top: 5px;}
         .header-label {
-            font-size: 0.8rem; 
+            font-size: 0.7rem; 
             font-weight: bold; 
             color: #aaa; 
             text-align: center; 
-            margin-bottom: 5px;
+            margin-bottom: 2px;
             text-transform: uppercase;
         }
     </style>
@@ -226,12 +233,14 @@ if st.session_state.workout_queue:
     
     for i, ex in enumerate(st.session_state.workout_queue):
         
+        # CARD HEADER
         with st.expander(f"**{ex['Exercise']}**", expanded=True):
             
+            # ACTIONS
             if st.button("📋 Fill Targets", key=f"cp_{i}", help="Auto-fill"):
                 copy_plan_to_actual(i, ex['Sets'])
                 st.rerun()
-            
+
             # === 📱 PORTRAIT MODE (TABS) ===
             if "Portrait" in view_mode:
                 tab_target, tab_actual = st.tabs(["🎯 Target", "📝 Actual"])
@@ -243,7 +252,7 @@ if st.session_state.workout_queue:
                         st.info(f"**Set {s+1}:** {t_weight} lbs × {t_reps} reps")
 
                 with tab_actual:
-                    # FIX: Use simple equal columns to force horizontal layout
+                    # HEADERS for Portrait
                     c_head1, c_head2, c_head3 = st.columns(3)
                     c_head1.markdown("<div class='header-label'>LBS</div>", unsafe_allow_html=True)
                     c_head2.markdown("<div class='header-label'>REPS</div>", unsafe_allow_html=True)
