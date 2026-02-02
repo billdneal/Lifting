@@ -20,44 +20,55 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. OPTIMIZED DATA LOADING (CACHED)
+# 2. ROBUST DATA LOADING (INDEPENDENT TABS)
 # ==========================================
-# This function only runs ONCE every 10 mins, saving your API quota
 @st.cache_data(ttl=600)
 def load_static_data():
-    try:
-        # Load all "Read Only" tabs at once
-        df_lib = conn.read(worksheet="Master", ttl=0, dtype=str)
-        df_profile = conn.read(worksheet="Profile", ttl=0, dtype=str)
-        df_dir = conn.read(worksheet="Directory", ttl=0, dtype=str)
-        df_const = conn.read(worksheet="Constants", ttl=0, dtype=str)
-        
-        # Parse RPE Table
-        rpe_dict = {}
-        for _, row in df_const.iterrows():
-            rpe_val_str = str(row['RPE']).strip()
-            if not rpe_val_str or rpe_val_str.lower() == 'nan': continue
-            rpe_val = float(rpe_val_str)
-            rpe_dict[rpe_val] = {}
-            for c in df_const.columns:
-                if c != 'RPE' and str(c).isdigit():
-                    val = str(row[c]).strip()
-                    if val and val.lower() != 'nan':
-                         rpe_dict[rpe_val][int(c)] = float(val)
+    # Initialize empty frames in case of partial failure
+    df_lib = pd.DataFrame()
+    df_profile = pd.DataFrame()
+    df_dir = pd.DataFrame()
+    rpe_dict = {10: {1: 1.0}}
 
-        # Cleanup Dataframes
+    # 1. Load MASTER (Your Programs)
+    try:
+        df_lib = conn.read(worksheet="Master", ttl=0, dtype=str)
         if not df_lib.empty:
             df_lib.dropna(how='all', inplace=True)
             df_lib['Sets'] = pd.to_numeric(df_lib['Sets'], errors='coerce').fillna(0).astype(int)
             df_lib['Pct'] = pd.to_numeric(df_lib['Pct'], errors='coerce').fillna(0.0)
-        
+    except: pass # If Master fails, we just have no templates
+    
+    # 2. Load PROFILE (Your Maxes)
+    try:
+        df_profile = conn.read(worksheet="Profile", ttl=0, dtype=str)
         if not df_profile.empty:
             df_profile['Max'] = pd.to_numeric(df_profile['Max'], errors='coerce').fillna(0.0)
-            
-        return df_lib, df_profile, df_dir, rpe_dict
+    except: pass
 
-    except Exception as e:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {10: {1: 1.0}}
+    # 3. Load DIRECTORY (Your Custom List)
+    try:
+        df_dir = conn.read(worksheet="Directory", ttl=0, dtype=str)
+    except: pass
+
+    # 4. Load CONSTANTS (RPE Table)
+    try:
+        df_const = conn.read(worksheet="Constants", ttl=0, dtype=str)
+        if not df_const.empty:
+            rpe_dict = {}
+            for _, row in df_const.iterrows():
+                rpe_val_str = str(row['RPE']).strip()
+                if not rpe_val_str or rpe_val_str.lower() == 'nan': continue
+                rpe_val = float(rpe_val_str)
+                rpe_dict[rpe_val] = {}
+                for c in df_const.columns:
+                    if c != 'RPE' and str(c).isdigit():
+                        val = str(row[c]).strip()
+                        if val and val.lower() != 'nan':
+                             rpe_dict[rpe_val][int(c)] = float(val)
+    except: pass
+            
+    return df_lib, df_profile, df_dir, rpe_dict
 
 def get_profile_max(df_profile, lift_name):
     if df_profile.empty: return 0.0
@@ -100,7 +111,12 @@ st.caption("⚡ IronOS Command")
 # --- A. SELECTOR / BUILDER ---
 if not st.session_state.workout_queue:
     
-    templates = list(df_lib['Template'].unique()) if not df_lib.empty else []
+    # Get Templates safely
+    templates = []
+    if not df_lib.empty and 'Template' in df_lib.columns:
+        templates = sorted(list(df_lib['Template'].unique()))
+    
+    # Always add Custom Build
     if "Custom Build" not in templates: templates.insert(0, "Custom Build")
     
     c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
@@ -137,9 +153,10 @@ if not st.session_state.workout_queue:
 
     # --- MODE 2: CUSTOM BUILDER ---
     elif sel_temp == "Custom Build":
-        list_profile = df_profile['Lift'].unique().tolist() if not df_profile.empty else []
-        list_lib = df_lib['Exercise'].unique().tolist() if not df_lib.empty else []
-        list_dir = df_dir['Exercise'].unique().tolist() if not df_dir.empty else []
+        # Build Exercise List Safely
+        list_profile = df_profile['Lift'].unique().tolist() if not df_profile.empty and 'Lift' in df_profile.columns else []
+        list_lib = df_lib['Exercise'].unique().tolist() if not df_lib.empty and 'Exercise' in df_lib.columns else []
+        list_dir = df_dir['Exercise'].unique().tolist() if not df_dir.empty and 'Exercise' in df_dir.columns else []
         
         all_exercises = sorted(list(set(list_profile + list_lib + list_dir)))
         
@@ -215,8 +232,8 @@ if st.session_state.workout_queue:
         new_logs = pd.DataFrame(logs_to_save)
         new_logs = new_logs[new_logs['Weight'] > 0]
         if not new_logs.empty:
-            # We only read the Logs sheet at the very last second to save quota
             try:
+                # Optimized save (doesn't re-download everything)
                 current_logs = conn.read(worksheet="Logs", ttl=0, dtype=str)
                 updated = pd.concat([current_logs, new_logs], ignore_index=True)
                 conn.update(worksheet="Logs", data=updated)
