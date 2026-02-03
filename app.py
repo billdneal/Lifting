@@ -198,21 +198,42 @@ def get_profile_max(df_profile, lift_name):
     return 0.0
 
 def parse_multi_value(value_str, count, is_number=False):
-    val_str = str(value_str).replace(" ", "")
+    """Parse comma-separated values, handling None and empty values"""
+    # Handle None, NaN, or empty values
+    if value_str is None or pd.isna(value_str):
+        value_str = ""
+    
+    # Convert to string and clean
+    val_str = str(value_str).replace(" ", "").strip()
+    
+    # If empty after cleaning, return default values
+    if not val_str:
+        if is_number:
+            return [0.0] * count
+        else:
+            return ["5"] * count
+    
     parts = val_str.split(',')
     if len(parts) == 1:
-        v = float(parts[0]) if is_number else parts[0]
-        return [v] * count
+        try:
+            v = float(parts[0]) if is_number else parts[0]
+            return [v] * count
+        except (ValueError, TypeError):
+            if is_number:
+                return [0.0] * count
+            else:
+                return ["5"] * count
+    
     result = []
     for i in range(count):
         raw = parts[i] if i < len(parts) else parts[-1]
         if is_number:
             try: 
                 result.append(float(raw))
-            except: 
+            except (ValueError, TypeError): 
                 result.append(0.0)
         else: 
-            result.append(raw)
+            result.append(str(raw))
     return result
 
 # Load data with error handling
@@ -333,6 +354,7 @@ if not st.session_state.workout_queue:
                         except: 
                             n_sets = 3
                         
+                        # SAFE: Handle potential None/NaN values
                         pct_str = str(row['Pct']) if pd.notna(row['Pct']) else "0"
                         pct_list = parse_multi_value(pct_str, n_sets, is_number=True)
                         
@@ -386,9 +408,9 @@ if st.session_state.workout_queue:
             """, unsafe_allow_html=True)
             
             for s in range(ex['Sets']):
-                # Get target values
-                t_weight = ex['Guide_List'][s] if s < len(ex['Guide_List']) else ex['Guide_List'][-1]
-                t_reps = ex['Rep_List'][s] if s < len(ex['Rep_List']) else ex['Rep_List'][-1]
+                # Get target values - with safe defaults
+                t_weight = ex['Guide_List'][s] if s < len(ex['Guide_List']) else ex['Guide_List'][-1] if ex['Guide_List'] else 0
+                t_reps = ex['Rep_List'][s] if s < len(ex['Rep_List']) else ex['Rep_List'][-1] if ex['Rep_List'] else "5"
                 
                 # Create columns WITHOUT gaps
                 cols = st.columns([0.12, 0.22, 0.22, 0.22, 0.11, 0.11], gap="small")
